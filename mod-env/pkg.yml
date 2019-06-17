@@ -18,7 +18,7 @@
 #
 
 #pkg.type: pkg
-pkg.name: "mod-ble"
+pkg.name: "mod-env"
 pkg.description: "Utility module for env reading for app core"
 pkg.author: "support@wyres.fr"
 pkg.homepage: "http://www.wyres.fr/"
