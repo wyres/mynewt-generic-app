@@ -1,3 +1,15 @@
 syscfg.defs:
+    MOD_BLE_PWRIO:
+        description: "gpio pin to enable power on ble module (11)"
+        value: EXT_UART_PWR
+    MOD_BLE_UART:
+        description: "uart socket device name to use to talk to ble module  (from BSP)"
+        value: 'UART0_DEV'
+    MOD_BLE_UART_BAUDRATE:
+        description: "baudrate for uart to use to talk to BLE module"
+        value: 115200
+    MOD_BLE_UART_SELECT:
+        description: "code for uart switcher for BLE module: extio=1, spkr=1 (BUT SPKR INVERTED)"
+        value: 1
 
 syscfg.vals:

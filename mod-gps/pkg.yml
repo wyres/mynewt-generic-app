@@ -27,5 +27,8 @@ pkg.keywords:
 pkg.deps:
     - "@apache-mynewt-core/kernel/os"
     - "@apache-mynewt-core/hw/hal"
+    - "@generic/generic"
+    - "@app-generic/app-core"
 
 pkg.init:
+    mod_gps_init : 993

@@ -1,4 +1,31 @@
 syscfg.defs:
+    MODS_ACTIVE_LED:
+        description: "LED to signal module data collection is ongoing"
+        value: LED_1
+    MODS_SCAN_PATTERN:
+        description: "LED flash pattern for data collection"
+        value: "1010101010"
 
+    NET_ACTIVE_LED:
+        description: "LED to signal network access is active"
+        value: LED_2
+    NET_SCAN_PATTERN:
+        description: "LED flash pattern for network access"
+        value: "1010101010"
+
+    APP_CORE_MAX_MODS:
+        description: "max number of modules allowed to register"
+        value: 8
+
+
+    LOG_UART:
+        description: "uart socket device name for logging output (from BSP)"
+        value: 'UARTDBG_DEV'
+    LOG_UART_BAUDRATE:
+        description: "baudrate for uart to use to log"
+        value: 19200
+    LOG_UART_SELECT:
+        description: "code for uart switcher for logging connector. Set to -1 if not using"
+        value: -1
 
 syscfg.vals:

@@ -19,7 +19,7 @@
 
 #pkg.type: pkg
 pkg.name: "app-core"
-pkg.description: "Core generic device app"
+pkg.description: "Core app SM for generic device"
 pkg.author: "support@wyres.fr"
 pkg.homepage: "http://www.wyres.fr/"
 pkg.keywords:
@@ -29,6 +29,7 @@ pkg.deps:
     - "@apache-mynewt-core/hw/hal"
     - "@lorawan/lorawan_api"
     - "@lorawan/lorawan_wrapper"
-
+    - "@generic/generic"
+# note: app level init is 990, module init functions should be called at 995 (in their respective pkg.ymls) 
 pkg.init:
-
+    app_core_init : 990

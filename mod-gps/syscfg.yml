@@ -1,4 +1,15 @@
 syscfg.defs:
-  
+    MOD_GPS_PWRIO:
+        description: "gpio pin to enable power on GPS - I2C bus (12)"
+        value: EXT_I2C_PWR     
+    MOD_GPS_UART:
+        description: "UART Socket device name to open to talk to GPS (from BSP)"
+        value: 'UART0_DEV'
+    MOD_GPS_UART_BAUDRATE:
+        description: "baudrate for uart to use to talk to GPS"
+        value: 9600
+    MOD_GPS_UART_SELECT:
+        description: "code for uart switcher for GPS module: extio=1, spkr=0 (BUT SPKR VALUE IS INVERTED)"
+        value: 3
 
 syscfg.vals:
