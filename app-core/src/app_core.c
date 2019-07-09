@@ -43,16 +43,21 @@ static struct appctx {
     } mods[MAX_MODS];   // registered modules api fns
     uint8_t modsMask[MOD_MASK_SZ];       // bit mask to indicate if module is active or not currently
     int currentSerialModIdx;
+    bool ulIsCrit;              // during data collection, module can signal critical data change ie must send UL
     APP_CORE_UL_t txmsg;        // for building UL messages
     APP_CORE_DL_t rxmsg;        // for decoding DL messages
-    uint32_t idleTimeMoving;
-    uint32_t idleTimeNotMoving;
-    uint32_t modSetupTime;
+    uint32_t lastULTime;        // timestamp of last uplink
+    uint32_t idleTimeMovingSecs;
+    uint32_t idleTimeNotMovingSecs;
+    uint32_t modSetupTimeSecs;
     uint32_t idleStartTS;
+    uint32_t maxTimeBetweenULSecs;
 } _ctx = {
     .nMods=0,
-    .idleTimeMoving=5*60,           // 5mins
-    .idleTimeNotMoving=120*60,      // 2 hours
+    .idleTimeMovingSecs=5*60,           // 5mins
+    .idleTimeNotMovingSecs=120*60,      // 2 hours
+    .modSetupTimeSecs=3,
+    .maxTimeBetweenULSecs=15*60,    // 15 mins
 };
 
 
@@ -60,9 +65,10 @@ static struct appctx {
 static void configChangedCB(uint16_t key) {
     // just re-get all my config in case it changed
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MODS_ACTIVE_MASK, &_ctx.modsMask[0], MOD_MASK_SZ);
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMoving, sizeof(uint32_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_SECS, &_ctx.idleTimeNotMoving, sizeof(uint32_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_MODSETUP_TIME_SECS, &_ctx.modSetupTime, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMovingSecs, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_SECS, &_ctx.idleTimeNotMovingSecs, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_MODSETUP_TIME_SECS, &_ctx.modSetupTimeSecs, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_MAXTIME_UL_SECS, &_ctx.maxTimeBetweenULSecs, sizeof(uint32_t));
 
 }
 static bool isModActive(uint8_t* mask, APP_MOD_ID_t id) {
@@ -99,14 +105,14 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
     struct appctx* ctx = (struct appctx*)arg;
     switch(e) {
         case SM_ENTER: {
-            log_debug("idle %d s", ctx->idleTimeMoving);
+            log_debug("idle %d s", ctx->idleTimeMovingSecs);
             // Stop all leds, and flash slow to show we're in sleep... this is for debug only
             ledStart(MYNEWT_VAL(MODS_ACTIVE_LED), FLASH_MIN, -1);
             ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_MIN, -1);
             // Set desired low power mode to be DEEP so it knows when mynewt says to sleep
             LPMgr_setLPMode(LP_DEEPSLEEP);
             // Start the wakeup timeout TODO check if moved recently and use different timer
-            sm_timer_start(ctx->mySMId, ctx->idleTimeMoving*1000);
+            sm_timer_start(ctx->mySMId, ctx->idleTimeMovingSecs*1000);
             // Record time
             ctx->idleStartTS = TMMgr_getRelTime();
             return SM_STATE_CURRENT;
@@ -119,6 +125,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             LPMgr_setLPMode(LP_SLEEP);
             //Initialise the DM we're sending
             app_core_msg_ul_init(&ctx->txmsg);
+            ctx->ulIsCrit = false;       // assume we're not gonna send it (its not critical)
             return SM_STATE_CURRENT;
         }
         case SM_TIMEOUT: {
@@ -193,7 +200,7 @@ static SM_STATE_ID_t State_GettingSerialMods(void* arg, int e, void* data) {
             if ((int)data == ctx->mods[ctx->currentSerialModIdx].id) {
 //                log_debug("done Smod %d, id %d ", ctx->currentSerialModIdx, (int)data);
                 // Get the data
-                (*(ctx->mods[ctx->currentSerialModIdx].api->getULDataCB))(&ctx->txmsg);
+                ctx->ulIsCrit |= (*(ctx->mods[ctx->currentSerialModIdx].api->getULDataCB))(&ctx->txmsg);
                 // stop any activity
                 (*(ctx->mods[ctx->currentSerialModIdx].api->stopCB))();
                 // Find next serial one
@@ -255,23 +262,30 @@ static SM_STATE_ID_t State_GettingParallelMods(void* arg, int e, void* data) {
         }
         case SM_EXIT: {
             ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
+            return SM_STATE_CURRENT;
+        }
+        case SM_TIMEOUT: {
             // Get data from active modules to build UL message
             // !! how to mediate between modules that use same IOs eg I2C or UART (with UART selector)
             // The accessed resource MUST provide a mutex type access control
+            
             for(int i=0;i<ctx->nMods;i++) {
                 if (isModActive(ctx->modsMask, ctx->mods[i].id)) {
                     if (ctx->mods[i].exec==EXEC_PARALLEL) {
-                        // Get the data
-                        (*(ctx->mods[i].api->getULDataCB))(&ctx->txmsg);
+                        // Get the data, and set the flag if module says the ul MUST be sent
+                        ctx->ulIsCrit |= (*(ctx->mods[i].api->getULDataCB))(&ctx->txmsg);
                         // stop any activity
                         (*(ctx->mods[i].api->stopCB))();
                     }
                 }
             }
-            return SM_STATE_CURRENT;
-        }
-        case SM_TIMEOUT: {
-            return MS_SENDING_UL;
+            // critical to send it if been a while since last one
+            ctx->ulIsCrit |= ((TMMgr_getRelTime() - ctx->lastULTime) > (ctx->maxTimeBetweenULSecs*1000));
+            if (ctx->ulIsCrit) {
+                return MS_SENDING_UL;
+            } else {            
+                return MS_IDLE;
+            }
         }
 
         default: {
@@ -334,10 +348,12 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
             switch (res) {
                 case LORA_TX_OK_ACKD: {
                     log_debug("lora tx is ACKD, going idle");
+                    ctx->lastULTime = TMMgr_getRelTime();
                     return MS_IDLE;
                 }
                 case LORA_TX_OK: {
                     log_debug("lora tx is OK, going idle");
+                    ctx->lastULTime = TMMgr_getRelTime();
                     return MS_IDLE;
                 }
                 case LORA_TX_ERR_NOTJOIN: {
@@ -376,10 +392,11 @@ static SM_STATE_t _mySM[MS_LAST] = {
 // Called to start the action, after all sysinit done
 void app_core_start() {
     log_debug("init app-core");
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMoving, sizeof(uint32_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_SECS, &_ctx.idleTimeNotMoving, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMovingSecs, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_SECS, &_ctx.idleTimeNotMovingSecs, sizeof(uint32_t));
     memset(&_ctx.modsMask[0], 0xff, MOD_MASK_SZ);       // Default every module is active
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MODS_ACTIVE_MASK, &_ctx.modsMask[0], MOD_MASK_SZ);
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_MAXTIME_UL_SECS, &_ctx.maxTimeBetweenULSecs, sizeof(uint32_t));
     CFMgr_registerCB(configChangedCB);      // For changes to our config
 
     // Can set config before init, then it all gets set once init done
@@ -411,6 +428,11 @@ bool AppCore_registerModule(APP_MOD_ID_t id, APP_CORE_API_t* mcbs, APP_MOD_EXEC_
     _ctx.nMods++;
     log_debug("a-c add [%d] exec[%d]", id, execType);
     return true;
+}
+
+// Last UL sent time (relative, ms)
+uint32_t AppCore_lastULTime() {
+    return _ctx.lastULTime;
 }
 // Time in ms
 uint32_t AppCore_getTimeToNextUL() {

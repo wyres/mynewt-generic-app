@@ -65,7 +65,7 @@ static void sleep() {
 static void deepsleep() {
 
 }
-static void getData(APP_CORE_UL_t* ul) {
+static bool getData(APP_CORE_UL_t* ul) {
     // Done BLE, go idle
     wble_scan_stop();
     // Get list of ibs in order into this array please
@@ -87,6 +87,7 @@ static void getData(APP_CORE_UL_t* ul) {
         }
     }
     log_debug("done with ble got %d beacons", nbSent);
+    return (nbSent>0);
 }
 
 static APP_CORE_API_t _api = {

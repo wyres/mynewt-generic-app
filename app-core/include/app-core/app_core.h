@@ -28,7 +28,7 @@ typedef uint32_t (*APP_MOD_START_FN_t)();       // returns time required for its
 typedef void (*APP_MOD_STOP_FN_t)();
 typedef void (*APP_MOD_SLEEP_FN_t)();
 typedef void (*APP_MOD_DEEPSLEEP_FN_t)();
-typedef void (*APP_MOD_GETULDATA_FN_t)(APP_CORE_UL_t* ul);
+typedef bool (*APP_MOD_GETULDATA_FN_t)(APP_CORE_UL_t* ul);      // returns true if UL is 'critical',  false if not
 typedef struct {
     APP_MOD_START_FN_t startCB;
     APP_MOD_STOP_FN_t stopCB;
@@ -43,7 +43,11 @@ typedef enum { APP_MOD_ENV=0, APP_MOD_GPS, APP_MOD_BLE_SCAN, APP_MOD_BLE_IB, APP
 typedef enum { EXEC_PARALLEL, EXEC_SERIAL } APP_MOD_EXEC_t;
 // core api for modules
 bool AppCore_registerModule(APP_MOD_ID_t id, APP_CORE_API_t* mcbs, APP_MOD_EXEC_t execType);
+// Timestamp of last UL (attempted)
+uint32_t AppCore_lastULTime();
+// Time in ms to next UL in theory
 uint32_t AppCore_getTimeToNextUL();
+// Go for UL preparation NOW
 bool AppCore_forceUL();
 // Tell core we're done processing
 void AppCore_module_done(APP_MOD_ID_t id);
@@ -51,6 +55,9 @@ void AppCore_module_done(APP_MOD_ID_t id);
 // app core TLV tags for UL
 typedef enum { APP_CORE_VERSION=0, APP_CORE_UPTIME, APP_CORE_CONFIG,
     APP_CORE_ENV_TEMP, APP_CORE_ENV_PRESSURE, APP_CORE_ENV_HUMIDITY, APP_CORE_ENV_LIGHT, 
+    APP_CORE_ENV_BUTTON, APP_CORE_ENV_MOVE, APP_CORE_ENV_ORIENT, APP_CORE_ENV_BATTERY, APP_CORE_ENV_NOISE,
+    APP_CORE_ENV_ADC1, APP_CORE_ENV_ADC2,
+    APP_CORE_ENV_REBOOT, APP_CORE_ENV_LASTASSERT,
     APP_CORE_BLE_CURR, APP_CORE_BLE_NEW, APP_CORE_BLE_LEFT, 
     APP_CORE_GPS
 } APP_CORE_UL_TAGS;
@@ -66,6 +73,7 @@ typedef enum { APP_CORE_SET_UTCTIME,
 #define CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_SECS   CFGKEY(CFG_MODULE_APP_CORE, 2)
 #define CFG_UTIL_KEY_MODSETUP_TIME_SECS         CFGKEY(CFG_MODULE_APP_CORE, 3)
 #define CFG_UTIL_KEY_MODS_ACTIVE_MASK           CFGKEY(CFG_MODULE_APP_CORE, 4)
+#define CFG_UTIL_KEY_MAXTIME_UL_SECS            CFGKEY(CFG_MODULE_APP_CORE, 5)
 
 // Configuration keys used by modules - add to end of list
 #define CFG_UTIL_KEY_BLE_SCAN_TIME_SECS          CFGKEY(CFG_MODULE_APP_CORE, 128)

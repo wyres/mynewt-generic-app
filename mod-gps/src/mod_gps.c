@@ -107,11 +107,13 @@ static void sleep() {
 static void deepsleep() {
     // TODO
 }
-static void getData(APP_CORE_UL_t* ul) {
-    if (_ctx.goodFix.rxAt!=0) {
+static bool getData(APP_CORE_UL_t* ul) {
+    if (_ctx.goodFixCnt>0 && _ctx.goodFix.rxAt!=0) {
         app_core_msg_ul_addTLV(ul, APP_CORE_GPS, sizeof(gps_data_t), &_ctx.goodFix);
         log_debug("good gps fix for UL");
+        return true;
     }
+    return false;
 }
 
 static APP_CORE_API_t _api = {
