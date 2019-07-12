@@ -34,6 +34,7 @@ static struct appctx {
 } _ctx = {
     .sentRebootInfo=NB_REBOOT_INFOS,
 };
+static void buttonChangeCB();
 
 // My api functions
 static uint32_t start() {
@@ -69,8 +70,8 @@ static bool getData(APP_CORE_UL_t* ul) {
         void* la = RMMgr_getLastAssertCallerFn();
         app_core_msg_ul_addTLV(ul, APP_CORE_ENV_LASTASSERT, sizeof(la), &la);
     }
-    // get accelero
-    if (MMMgr_getLastMovedTime() > AppCore_lastULTime()) {
+    // get accelero if changed since last UL
+    if (MMMgr_getLastMovedTime() >= AppCore_lastULTime()) {
         struct {
             uint32_t lastMoveTS;
             uint32_t lastFallTS;
@@ -88,7 +89,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         app_core_msg_ul_addTLV(ul, APP_CORE_ENV_MOVE, sizeof(v), &v);
     }
     // orientation direct (if changed) 
-    if (MMMgr_getLastOrientTime() > AppCore_lastULTime()) {
+    if (MMMgr_getLastOrientTime() >= AppCore_lastULTime()) {
         uint8_t v = MMMgr_getOrientation();
         app_core_msg_ul_addTLV(ul, APP_CORE_ENV_ORIENT, sizeof(v), &v);
     }
@@ -124,7 +125,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         app_core_msg_ul_addTLV(ul, APP_CORE_ENV_ADC2, sizeof(vv2), &vv2);
     }
     // get micro if noise detected
-    if (SRMgr_getLastNoiseTime() > AppCore_lastULTime()) {
+    if (SRMgr_getLastNoiseTime() >= AppCore_lastULTime()) {
         struct {
             uint32_t time;
             uint8_t freqkHz;
@@ -137,13 +138,17 @@ static bool getData(APP_CORE_UL_t* ul) {
     }
 
     // get button
-    if (SRMgr_getLastButtonTime() > AppCore_lastULTime()) {
+    if (SRMgr_getLastButtonPressTS() >= AppCore_lastULTime()) {
         struct {
-            uint32_t time;
+            uint32_t pressTS;
+            uint32_t releaseTS;
             uint8_t currState;
+            uint8_t lastPressType;
         } v;
-        v.time = SRMgr_getLastButtonTime();
+        v.pressTS = SRMgr_getLastButtonPressTS();
+        v.releaseTS = SRMgr_getLastButtonReleaseTS();
         v.currState = SRMgr_getButton();
+        v.lastPressType = SRMgr_getLastButtonPressType();
         app_core_msg_ul_addTLV(ul, APP_CORE_ENV_BUTTON, sizeof(v), &v);
     }
     return SRMgr_updateEnvs();     // update those that changed as we have added them to the UL... and return the flag that says if any changed
@@ -160,5 +165,24 @@ static APP_CORE_API_t _api = {
 void mod_env_init(void) {
     // hook app-core for env data
     AppCore_registerModule(APP_MOD_ENV, &_api, EXEC_PARALLEL);
+
+    // add cb for button press
+    SRMgr_registerButtonCB(buttonChangeCB);
 //    log_debug("mod-env initialised");
+}
+
+// internals
+// callback each time button changes state
+static void buttonChangeCB() {
+    uint8_t bs = SRMgr_getButton();
+    if (bs==SR_BUTTON_RELEASED) {
+        // note using log_noout as button shares GPIO with debug log uart...
+        log_noout("button released, duration %d ms, press type:%d", 
+            (SRMgr_getLastButtonReleaseTS()-SRMgr_getLastButtonPressTS()),
+            SRMgr_getLastButtonPressType());
+        // ask for immediate UL
+        AppCore_forceUL();
+    } else {
+        log_noout("button pressed");
+    }
 }

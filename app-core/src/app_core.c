@@ -58,6 +58,7 @@ static struct appctx {
     .idleTimeNotMovingSecs=120*60,      // 2 hours
     .modSetupTimeSecs=3,
     .maxTimeBetweenULSecs=15*60,    // 15 mins
+    .lastULTime=0,
 };
 
 

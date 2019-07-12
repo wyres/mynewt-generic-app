@@ -35,10 +35,14 @@ void app_core_init(void) {
     // initialise devices
 //    assert(L96_I2C_comm_create("L96_0", "I2C0", MYNEWT_VAL(L96_0_I2C_ADDR), MYNEWT_VAL(L96_0_PWRIO)));
     assert(uart_line_comm_create(UART0_DEV, MYNEWT_VAL(GPS_UART_BAUDRATE)));
+    // If specific device for logging, create its wskt driver driver
 #if (MYNEWT_VAL(UART_DBG))
     assert(uart_line_comm_create(UARTDBG_DEV, MYNEWT_VAL(LOG_UART_BAUDRATE)));
 #endif
+    // If logging to a uart is required, tell logging system
+#if (MYNEWT_VAL(LOG_UART_ENABLED))
     log_init_uart(MYNEWT_VAL(LOG_UART), MYNEWT_VAL(LOG_UART_BAUDRATE), MYNEWT_VAL(LOG_UART_SELECT));       // Uart define names are as per STM32 doc
+#endif
 //    log_init_dbg(0);      // dont do blocking tx please
 
     log_warn("app init - reset %s, assert from [0x%08x]", 
