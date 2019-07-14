@@ -296,7 +296,17 @@ static SM_STATE_ID_t State_GettingParallelMods(void* arg, int e, void* data) {
     }
     assert(0);      // shouldn't get here
 }
-
+static LORA_TX_RESULT_t tryTX(APP_CORE_UL_t* txmsg) {
+    uint8_t txsz = app_core_msg_ul_finalise(txmsg);
+    LORA_TX_RESULT_t res = LORA_TX_ERR_RETRY;
+    if (txsz>0) {
+        res = lora_app_tx(&(txmsg->msgs[txmsg->msbNbTxing].payload[0]), txsz, 8000);
+    } else {
+        log_debug("no UL finalise said %d", txsz);
+        res = LORA_TX_NO_TX;    // not an actual error but no tx so no point waiting for result
+    }
+    return res;
+}
 static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
     struct appctx* ctx = (struct appctx*)arg;
 
@@ -305,20 +315,14 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
             log_debug("trying to send UL");
             // start leds for UL
             ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_5HZ, -1);
-            uint8_t txsz = app_core_msg_ul_finalise(&ctx->txmsg);
-            LORA_TX_RESULT_t res = LORA_TX_ERR_RETRY;
-            if (txsz>0) {
-                res = lora_app_tx(ctx->txmsg.payload, txsz, 8000);
-            } else {
-                log_debug("not sending UL as finalise said bad %d", txsz);
-            }
+            LORA_TX_RESULT_t res = tryTX(&ctx->txmsg);
             if (res==LORA_TX_OK) {
                 // this timer should be bigger than the one we give to the tx above... its a belt and braces job
                 sm_timer_start(ctx->mySMId,  25000);
                 // ok wait for result
             } else {
-                // want to abort immediately... send myself a result (think this will work...)
-                log_debug("trying to send UL tx failed immediatrly...");
+                // want to abort immediately... send myself a result event
+                log_debug("send UL tx failed %d", res);
                 sm_sendEvent(ctx->mySMId, ME_LORA_RESULT, (void*)res);    // pass the code as the value not as a pointer
             }
             return SM_STATE_CURRENT;
@@ -348,14 +352,14 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
             LORA_TX_RESULT_t res = ((LORA_TX_RESULT_t)data);
             switch (res) {
                 case LORA_TX_OK_ACKD: {
-                    log_debug("lora tx is ACKD, going idle");
+                    log_debug("lora tx is ACKD, check next");
                     ctx->lastULTime = TMMgr_getRelTime();
-                    return MS_IDLE;
+                    break;
                 }
                 case LORA_TX_OK: {
-                    log_debug("lora tx is OK, going idle");
+                    log_debug("lora tx is OK, check next");
                     ctx->lastULTime = TMMgr_getRelTime();
-                    return MS_IDLE;
+                    break;
                 }
                 case LORA_TX_ERR_NOTJOIN: {
                     // Retry join here? change the SF? TODO
@@ -371,9 +375,18 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
                     break; // fall out
                 }
             }
-            log_debug("lora tx result is %d, going idle", res);
-            // And we're done
-            return MS_IDLE;
+            // See if we have another mssg to go
+            res = tryTX(&ctx->txmsg);
+            if (res==LORA_TX_OK) {
+                // this timer should be bigger than the one we give to the tx above... its a belt and braces job
+                sm_timer_start(ctx->mySMId,  25000);
+                // ok wait for result
+                return SM_STATE_CURRENT;
+            } else {
+                log_debug("lora tx UL res %d, going idle", res);
+                // And we're done
+                return MS_IDLE;
+            }
         }
         default: {
             log_debug("unknown event %d in state sending DM", e);

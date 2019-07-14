@@ -74,23 +74,42 @@ static bool getData(APP_CORE_UL_t* ul) {
     if (MMMgr_getLastMovedTime() >= AppCore_lastULTime()) {
         struct {
             uint32_t lastMoveTS;
+            uint8_t movePerUL;
+        } v;
+        v.lastMoveTS = MMMgr_getLastMovedTime();
+        v.movePerUL = 1;       // TODO should record for last 8 ULs...
+        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_MOVE, sizeof(v), &v);
+    }
+    if (MMMgr_getLastFallTime() >= AppCore_lastULTime()) {
+        struct {
             uint32_t lastFallTS;
+            uint8_t fallPerUL;
+        } v;
+        v.lastFallTS = MMMgr_getLastFallTime();
+        v.fallPerUL = 1;       // TODO should record for last 8 ULs...
+        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_FALL, sizeof(v), &v);
+    }
+    if (MMMgr_getLastShockTime() >= AppCore_lastULTime()) {
+        struct {
             uint32_t lastShockTS;
+            uint8_t shockPerUL;
+        } v;
+        v.lastShockTS = MMMgr_getLastShockTime();
+        v.shockPerUL = 1;       // TODO should record for last 8 ULs...
+        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_SHOCK, sizeof(v), &v);
+    }
+    // orientation direct (if changed) 
+    if (MMMgr_getLastOrientTime() >= AppCore_lastULTime()) {
+        struct {
+            uint8_t orient;
             int8_t x;
             int8_t y;
             int8_t z;
         } v;
-        v.lastMoveTS = MMMgr_getLastMovedTime();
-        v.lastFallTS = MMMgr_getLastFallTime();
-        v.lastShockTS = MMMgr_getLastShockTime();
+        v.orient = MMMgr_getOrientation();
         v.x = MMMgr_getXdG();
         v.y = MMMgr_getYdG();
-        v.z = MMMgr_getZdG();
-        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_MOVE, sizeof(v), &v);
-    }
-    // orientation direct (if changed) 
-    if (MMMgr_getLastOrientTime() >= AppCore_lastULTime()) {
-        uint8_t v = MMMgr_getOrientation();
+        v.z = MMMgr_getZdG();        
         app_core_msg_ul_addTLV(ul, APP_CORE_ENV_ORIENT, sizeof(v), &v);
     }
     // Basic environmental stuff

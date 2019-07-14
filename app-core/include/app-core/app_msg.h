@@ -20,7 +20,8 @@ extern "C" {
 #endif
 
 // message definitions for uplink and downlink
-#define APP_CORE_MSG_MAX_SZ (250)
+#define APP_CORE_MSG_MAX_SZ (50)
+#define APP_CORE_MSG_MAX_NB (4)     // up to 4 messages per round
 #define LORAWAN_UL_PORT 3
 #define LORAWAN_DL_PORT 3
 
@@ -28,8 +29,12 @@ extern "C" {
 // byte 0 : b0-3 : lastDLId, b4-5 : protocol version, b6 : config stock, b7 : even parity bit
 // byte 1 : length of following TLV section
 typedef struct {
-    uint8_t payload[APP_CORE_MSG_MAX_SZ];
-    uint8_t sz;
+    struct {
+        uint8_t payload[APP_CORE_MSG_MAX_SZ];
+        uint8_t sz;
+    } msgs[APP_CORE_MSG_MAX_NB];
+    uint8_t msgNbFilling;
+    uint8_t msbNbTxing;
 } APP_CORE_UL_t;
 typedef struct {
     uint8_t payload[APP_CORE_MSG_MAX_SZ];
@@ -39,6 +44,7 @@ typedef struct {
 
 void app_core_msg_ul_init(APP_CORE_UL_t* msg);
 bool app_core_msg_ul_addTLV(APP_CORE_UL_t* msg, uint8_t t, uint8_t l, void* v);
+uint8_t* app_core_msg_ul_addTLgetVP(APP_CORE_UL_t* ul, uint8_t t, uint8_t l) ;
 uint8_t app_core_msg_ul_finalise(APP_CORE_UL_t* msg);
 void app_core_msg_dl_init(APP_CORE_DL_t* msg);
 bool app_core_msg_dl_decode(APP_CORE_DL_t* msg);

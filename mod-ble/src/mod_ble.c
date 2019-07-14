@@ -74,16 +74,16 @@ static bool getData(APP_CORE_UL_t* ul) {
     // Note we only send the best 3 as current
     uint8_t nbSent = wble_getSortedIBList(MAX_BLE_CURR, iblist);
     if (nbSent>0) {
-        // Add T+L to UL directly
-        ul->payload[ul->sz++] = APP_CORE_BLE_CURR;
-        ul->payload[ul->sz++] = nbSent*6;
-        for(int i=0;i<nbSent;i++) {
-            ul->payload[ul->sz++] = (iblist[i].major & 0xff);
-            ul->payload[ul->sz++] = ((iblist[i].major >> 8) & 0xff);
-            ul->payload[ul->sz++] = (iblist[i].minor & 0xff);
-            ul->payload[ul->sz++] = ((iblist[i].minor >> 8) & 0xff);
-            ul->payload[ul->sz++] = iblist[i].rssi;
-            ul->payload[ul->sz++] = iblist[i].extra;
+        uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_BLE_CURR,nbSent*6);
+        if (vp!=NULL) {
+            for(int i=0;i<nbSent;i++) {
+                *vp++ = (iblist[i].major & 0xff);
+                *vp++ = ((iblist[i].major >> 8) & 0xff);
+                *vp++ = (iblist[i].minor & 0xff);
+                *vp++ = ((iblist[i].minor >> 8) & 0xff);
+                *vp++ = iblist[i].rssi;
+                *vp++ = iblist[i].extra;
+            }
         }
     }
     log_debug("done with ble got %d beacons", nbSent);
