@@ -38,15 +38,15 @@ static void buttonChangeCB();
 
 // My api functions
 static uint32_t start() {
-    log_debug("start env data collection");
+    log_debug("start env");
     // sensors that require power up or significant check time
     SRMgr_start();
-    log_debug("started env data collection for 1s");
+    log_debug("for 1s");
     return 1*1000;
 }
 
 static void stop() {
-    log_debug("done with env data collection");
+    log_debug("done env");
     SRMgr_stop();
 }
 static void sleep() {
@@ -58,7 +58,7 @@ static void deepsleep() {
     SRMgr_stop();
 }
 static bool getData(APP_CORE_UL_t* ul) {
-    log_debug("adding env data collection to UL");
+    log_debug("UL: add env");
     // if first N times after reboot, add reboot info
     if (_ctx.sentRebootInfo >0) {
         _ctx.sentRebootInfo--;
