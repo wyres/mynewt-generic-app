@@ -20,8 +20,9 @@ extern "C" {
 #endif
 
 // message definitions for uplink and downlink
-#define APP_CORE_MSG_MAX_SZ (50)
-#define APP_CORE_MSG_MAX_NB (4)     // up to 4 messages per round
+#define APP_CORE_UL_MAX_SZ (50)     // so always fits
+#define APP_CORE_UL_MAX_NB (4)     // up to 4 UL messages per round to get 200 bytes
+#define APP_CORE_DL_MAX_SZ (250)    // as we don't control it
 #define LORAWAN_UL_PORT 3
 #define LORAWAN_DL_PORT 3
 
@@ -30,22 +31,33 @@ extern "C" {
 // byte 1 : length of following TLV section
 typedef struct {
     struct {
-        uint8_t payload[APP_CORE_MSG_MAX_SZ];
+        uint8_t payload[APP_CORE_UL_MAX_SZ];
         uint8_t sz;
-    } msgs[APP_CORE_MSG_MAX_NB];
+    } msgs[APP_CORE_UL_MAX_NB];
     uint8_t msgNbFilling;
     uint8_t msbNbTxing;
 } APP_CORE_UL_t;
+
+// First 2 bytes are header, then 'actions'
+// Byte 0 : b0-3 : msgtype = 0x6, b4-5 : protocol version, b6 : RFU, b7 : even parity bit
+// byte 1 : b0-3 : number of elements TLV in this message (not the length in bytes), b4-7 : dlId for this DL
 typedef struct {
-    uint8_t payload[APP_CORE_MSG_MAX_SZ];
-    uint8_t type;
-    uint8_t sz;
+    uint8_t payload[APP_CORE_DL_MAX_SZ];
+    uint8_t dlId;
+    uint8_t nbActions;
+    uint8_t sz;     // in bytes of message
 } APP_CORE_DL_t;
+
+typedef void (*ACTIONFN_t)(uint8_t* v, uint8_t l);
+typedef struct {
+    uint8_t id;
+    ACTIONFN_t fn;
+} ACTION_t;
 
 void app_core_msg_ul_init(APP_CORE_UL_t* msg);
 bool app_core_msg_ul_addTLV(APP_CORE_UL_t* msg, uint8_t t, uint8_t l, void* v);
 uint8_t* app_core_msg_ul_addTLgetVP(APP_CORE_UL_t* ul, uint8_t t, uint8_t l) ;
-uint8_t app_core_msg_ul_finalise(APP_CORE_UL_t* msg);
+uint8_t app_core_msg_ul_finalise(APP_CORE_UL_t* msg, uint8_t lastDLId, bool willListen);
 void app_core_msg_dl_init(APP_CORE_DL_t* msg);
 bool app_core_msg_dl_decode(APP_CORE_DL_t* msg);
 bool app_core_msg_dl_execute(APP_CORE_DL_t* msg);

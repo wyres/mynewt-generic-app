@@ -22,11 +22,12 @@
 #include "wyres-generic/lowpowermgr.h"
 #include "wyres-generic/loraapp.h"
 #include "wyres-generic/timemgr.h"
+#include "wyres-generic/rebootMgr.h"
 
 #include "app-core/app_core.h"
 #include "app-core/app_msg.h"
 
-
+#define MAX_DL_ACTIONS  (8)
 #define MAX_MODS    MYNEWT_VAL(APP_CORE_MAX_MODS)
 // Size of bit mask in bytes to contain all known modules
 #define MOD_MASK_SZ ((APP_MOD_LAST/8)+1)
@@ -52,15 +53,24 @@ static struct appctx {
     uint32_t modSetupTimeSecs;
     uint32_t idleStartTS;
     uint32_t maxTimeBetweenULSecs;
+    uint8_t nActions;
+    ACTION_t actions[MAX_DL_ACTIONS];
+    // ul response id : holds the last DL id we received. Sent in each UL to inform backend we got its DLs. 0=not listening
+    uint8_t lastDLId;
 } _ctx = {
     .nMods=0,
+    .nActions=0,
     .idleTimeMovingSecs=5*60,           // 5mins
     .idleTimeNotMovingSecs=120*60,      // 2 hours
     .modSetupTimeSecs=3,
     .maxTimeBetweenULSecs=15*60,    // 15 mins
     .lastULTime=0,
+    .lastDLId=0,            // default when new, will be read from the config mgr
 };
 
+// predeclarations
+static void registerActions();
+static void executeDL(struct appctx* ctx, APP_CORE_DL_t* data);
 
 // Callback from config mgr when the actived modules mask changes
 static void configChangedCB(uint16_t key) {
@@ -91,12 +101,20 @@ static void lora_tx_cb(LORA_TX_RESULT_t res) {
 }
 
 static void lora_rx_cb(uint8_t port, void* data, uint8_t sz) {
-    // Use static message buffer in ctx as sendEvent is executed off this thread -> can't use stack var.
+    // Copy data into static message buffer in ctx as sendEvent is executed off this thread -> can't use stack var.
+    if (sz>APP_CORE_DL_MAX_SZ) {
+        // oops
+        log_debug("lora rx toobig sz %d", sz);
+        return;
+    }
+    memcpy(&_ctx.rxmsg.payload[0], data, sz);
+    _ctx.rxmsg.sz = sz;
+    // Decode it
     if (app_core_msg_dl_decode(&_ctx.rxmsg)) {
-        log_debug("lora rx type %d", _ctx.rxmsg.type);
+        log_debug("lora rx dlid %d, na %d", _ctx.rxmsg.dlId, _ctx.rxmsg.nbActions);
         sm_sendEvent(_ctx.mySMId, ME_LORA_RX, (void*)(&_ctx.rxmsg));
     } else {
-        log_debug("lora rx BAD DECODE sz %d", sz);
+        log_debug("lora rx BAD sz %d b0/1 %02x:%02x", sz, ((uint8_t*)data)[0], ((uint8_t*)data)[1]);
     }
 }
 // SM state functions
@@ -138,11 +156,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
         }
         case ME_LORA_RX: {
             if (data!=NULL) {
-                if (app_core_msg_dl_execute((APP_CORE_DL_t*)data)) {
-                    log_debug("executed DL ok");
-                } else {
-                    log_debug("some elements of DL not executed");
-                }
+                executeDL(ctx, (APP_CORE_DL_t*)data);
             }
             return SM_STATE_CURRENT;
         }
@@ -296,8 +310,8 @@ static SM_STATE_ID_t State_GettingParallelMods(void* arg, int e, void* data) {
     }
     assert(0);      // shouldn't get here
 }
-static LORA_TX_RESULT_t tryTX(APP_CORE_UL_t* txmsg) {
-    uint8_t txsz = app_core_msg_ul_finalise(txmsg);
+static LORA_TX_RESULT_t tryTX(APP_CORE_UL_t* txmsg, uint8_t dlid, bool willListen) {
+    uint8_t txsz = app_core_msg_ul_finalise(txmsg, dlid, willListen);
     LORA_TX_RESULT_t res = LORA_TX_ERR_RETRY;
     if (txsz>0) {
         res = lora_app_tx(&(txmsg->msgs[txmsg->msbNbTxing].payload[0]), txsz, 8000);
@@ -315,7 +329,7 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
             log_debug("trying to send UL");
             // start leds for UL
             ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_5HZ, -1);
-            LORA_TX_RESULT_t res = tryTX(&ctx->txmsg);
+            LORA_TX_RESULT_t res = tryTX(&ctx->txmsg, ctx->lastDLId, true);
             if (res==LORA_TX_OK) {
                 // this timer should be bigger than the one we give to the tx above... its a belt and braces job
                 sm_timer_start(ctx->mySMId,  25000);
@@ -338,11 +352,7 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
         }
         case ME_LORA_RX: {
             if (data!=NULL) {
-                if (app_core_msg_dl_execute((APP_CORE_DL_t*)data)) {
-                    log_debug("executed DL ok");
-                } else {
-                    log_debug("some elements of DL not executed");
-                }
+                executeDL(ctx, (APP_CORE_DL_t*)data);
             }
             return SM_STATE_CURRENT;
         }
@@ -375,8 +385,9 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
                     break; // fall out
                 }
             }
-            // See if we have another mssg to go
-            res = tryTX(&ctx->txmsg);
+            // See if we have another mssg to go. Not we say not listening ie don't send me DL as we haven't 
+            // processing any RX yet, so our 'lastDLId' is not up to date and we'll get a repated action DL!
+            res = tryTX(&ctx->txmsg, ctx->lastDLId, false);
             if (res==LORA_TX_OK) {
                 // this timer should be bigger than the one we give to the tx above... its a belt and braces job
                 sm_timer_start(ctx->mySMId,  25000);
@@ -411,7 +422,11 @@ void app_core_start() {
     memset(&_ctx.modsMask[0], 0xff, MOD_MASK_SZ);       // Default every module is active
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MODS_ACTIVE_MASK, &_ctx.modsMask[0], MOD_MASK_SZ);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MAXTIME_UL_SECS, &_ctx.maxTimeBetweenULSecs, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_DL_ID, &_ctx.lastDLId, sizeof(uint8_t));
+
     CFMgr_registerCB(configChangedCB);      // For changes to our config
+
+    registerActions();
 
     // Can set config before init, then it all gets set once init done
     lora_app_setAck(true);      // we like acks in this test program
@@ -432,7 +447,7 @@ void app_core_start() {
 
 // core api for modules
 // mcbs pointer must be to a static structure
-bool AppCore_registerModule(APP_MOD_ID_t id, APP_CORE_API_t* mcbs, APP_MOD_EXEC_t execType) {
+void AppCore_registerModule(APP_MOD_ID_t id, APP_CORE_API_t* mcbs, APP_MOD_EXEC_t execType) {
     assert(id < APP_MOD_LAST);
     assert(_ctx.nMods<MAX_MODS);
 
@@ -441,7 +456,32 @@ bool AppCore_registerModule(APP_MOD_ID_t id, APP_CORE_API_t* mcbs, APP_MOD_EXEC_
     _ctx.mods[_ctx.nMods].exec = execType;
     _ctx.nMods++;
     log_debug("a-c add [%d] exec[%d]", id, execType);
-    return true;
+}
+
+// register a DL action handler
+// Note asserts if id already registered, or table is full
+void AppCore_registerAction(uint8_t id, ACTIONFN_t cb) {
+    assert(_ctx.nActions<MAX_DL_ACTIONS);
+    assert(cb!=NULL);
+    // Check noone else has registerd this
+    for(int i=0;i<_ctx.nActions;i++) {
+        if (_ctx.actions[i].id==id) {
+            assert(0);
+        }
+    }
+    _ctx.actions[_ctx.nActions].id = id;
+    _ctx.actions[_ctx.nActions].fn = cb;
+    _ctx.nActions++;
+    log_debug("a-c reg action [%d]", id);
+}
+// Find action fn or NULL
+ACTIONFN_t AppCore_findAction(uint8_t id) {
+    for(int i=0;i<_ctx.nActions;i++) {
+        if (_ctx.actions[i].id==id) {
+            return _ctx.actions[i].fn;
+        }
+    }
+    return NULL;
 }
 
 // Last UL sent time (relative, ms)
@@ -461,3 +501,63 @@ void AppCore_module_done(APP_MOD_ID_t id) {
     sm_sendEvent(_ctx.mySMId, ME_MODULE_DONE, (void*)id);
 }
 
+// helper to read LE from buffer (may be 0 stripped)
+uint32_t readUINT32LE(uint8_t* b, uint8_t l) {
+    uint32_t ret = 0;
+    for(int i=0;i<4;i++) {
+        if (b!=NULL && i<l) {
+            ret += (b[i] << 8*i);
+        } // else 0
+    }
+    return ret;
+}
+// Internals : action handling
+static void executeDL(struct appctx* ctx, APP_CORE_DL_t* data) {
+    if (app_core_msg_dl_execute(data)) {
+        log_debug("a-c exec DL ok id now %d", data->dlId);
+        // Can update last dl id since we did its actions
+        ctx->lastDLId = data->dlId;
+        // Store in case we reboot
+        CFMgr_setElement(CFG_UTIL_KEY_DL_ID, &ctx->lastDLId, sizeof(uint8_t));
+    } else {
+        log_debug("a-c DL not exec OK");
+    }
+}
+
+static void A_reboot(uint8_t* v, uint8_t l) {
+    log_debug("action REBOOT");
+    // TODO must wait till execute actions finished!
+    // Send ourselves an event? or set timer to reboot?
+    //    RMMgr_reboot(RM_DM_ACTION);
+}
+
+static void A_setConfig(uint8_t* v, uint8_t l) {
+    log_debug("action GETCONFIG (TBI)");
+    
+}
+
+static void A_getConfig(uint8_t* v, uint8_t l) {
+    log_debug("action GETCONFIG (TBI)");
+}
+static void A_fota(uint8_t* v, uint8_t l) {
+    log_debug("action FOTA (TBI)");
+}
+static void A_settime(uint8_t* v, uint8_t l) {
+    log_debug("action SETTIME");
+    uint32_t now = readUINT32LE(v, l);
+    // boot time in UTC is now - time elapsed since boot
+    TMMgr_setBootTime(now - TMMgr_getRelTime());
+}
+
+static void A_getmods(uint8_t* v, uint8_t l) {
+    log_debug("action FOTA (TBI)");    
+}
+
+static void registerActions() {
+    AppCore_registerAction(APP_CORE_DL_REBOOT, &A_reboot);
+    AppCore_registerAction(APP_CORE_DL_SET_CONFIG, &A_setConfig);
+    AppCore_registerAction(APP_CORE_DL_GET_CONFIG, &A_getConfig);
+    AppCore_registerAction(APP_CORE_DL_SET_UTCTIME, &A_settime);
+    AppCore_registerAction(APP_CORE_DL_FOTA, &A_fota);
+    AppCore_registerAction(APP_CORE_DL_GET_MODS, &A_getmods);
+}

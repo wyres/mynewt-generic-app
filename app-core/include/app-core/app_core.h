@@ -42,7 +42,7 @@ typedef enum { APP_MOD_ENV=0, APP_MOD_GPS, APP_MOD_BLE_SCAN, APP_MOD_BLE_IB, APP
 // Should module be run in parallel with others, or must it be alone (eg coz using a shared resource like a bus)?
 typedef enum { EXEC_PARALLEL, EXEC_SERIAL } APP_MOD_EXEC_t;
 // core api for modules
-bool AppCore_registerModule(APP_MOD_ID_t id, APP_CORE_API_t* mcbs, APP_MOD_EXEC_t execType);
+void AppCore_registerModule(APP_MOD_ID_t id, APP_CORE_API_t* mcbs, APP_MOD_EXEC_t execType);
 // Timestamp of last UL (attempted)
 uint32_t AppCore_lastULTime();
 // Time in ms to next UL in theory
@@ -51,6 +51,10 @@ uint32_t AppCore_getTimeToNextUL();
 bool AppCore_forceUL();
 // Tell core we're done processing
 void AppCore_module_done(APP_MOD_ID_t id);
+// Register a DL action handler
+void AppCore_registerAction(uint8_t id, ACTIONFN_t cb);
+// Find an action handler or NULL
+ACTIONFN_t AppCore_findAction(uint8_t id);
 
 // app core TLV tags for UL
 typedef enum { APP_CORE_VERSION=0, APP_CORE_UPTIME, APP_CORE_CONFIG,
@@ -63,9 +67,9 @@ typedef enum { APP_CORE_VERSION=0, APP_CORE_UPTIME, APP_CORE_CONFIG,
     APP_CORE_GPS
 } APP_CORE_UL_TAGS;
 // app core TLV tags for DL
-typedef enum { APP_CORE_SET_UTCTIME, 
-    APP_CORE_ACTIONS, APP_CORE_FOTA, APP_CORE_SET_CONFIG, APP_CORE_GET_CONFIG,
-    APP_CORE_AVAILABLE_MODS
+// App core has handlers for up to GET_MODS
+typedef enum { APP_CORE_DL_REBOOT=1, APP_CORE_DL_SET_CONFIG, APP_CORE_DL_GET_CONFIG,         
+    APP_CORE_DL_SET_UTCTIME, APP_CORE_DL_FOTA, APP_CORE_DL_GET_MODS                  
 } APP_CORE_DL_TAGS;
 
 
@@ -75,6 +79,7 @@ typedef enum { APP_CORE_SET_UTCTIME,
 #define CFG_UTIL_KEY_MODSETUP_TIME_SECS         CFGKEY(CFG_MODULE_APP_CORE, 3)
 #define CFG_UTIL_KEY_MODS_ACTIVE_MASK           CFGKEY(CFG_MODULE_APP_CORE, 4)
 #define CFG_UTIL_KEY_MAXTIME_UL_SECS            CFGKEY(CFG_MODULE_APP_CORE, 5)
+#define CFG_UTIL_KEY_DL_ID                      CFGKEY(CFG_MODULE_APP_CORE, 6)
 
 // Configuration keys used by modules - add to end of list
 #define CFG_UTIL_KEY_BLE_SCAN_TIME_SECS          CFGKEY(CFG_MODULE_APP_CORE, 128)

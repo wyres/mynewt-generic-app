@@ -20,16 +20,16 @@
 
 #include "wyres-generic/wutils.h"
 #include "app-core/app_msg.h"
+#include "app-core/app_core.h"
 
-// ul response id : holds the last DL id we received. Sent in each UL to inform backend we got its DLs
-static uint8_t _ulRespId=0;
 
-// Generate 1 or 0 to create even parity for the given byte
-static uint8_t evenParity(uint8_t d) {
-    uint8_t ret=0x00;
+
+// return true if parity is even, false if not for the given byte
+static bool evenParity(uint8_t d) {
+    bool ret=true;
     for(int i=0;i<8;i++) {
         if (d & (1<<i)) {
-            ret ^= 0x01;     // flip the bit with xor if checked bit is 1
+            ret = !ret;     // if checked bit is 1, i,nvert result
         }
     }
     return ret;
@@ -42,9 +42,9 @@ void app_core_msg_ul_init(APP_CORE_UL_t* ul) {
 }
 // Add TLV into payload if possible
 bool app_core_msg_ul_addTLV(APP_CORE_UL_t* ul, uint8_t t, uint8_t l, void* v) {
-    if ((ul->msgs[ul->msgNbFilling].sz + l + 2) > APP_CORE_MSG_MAX_SZ) {
+    if ((ul->msgs[ul->msgNbFilling].sz + l + 2) > APP_CORE_UL_MAX_SZ) {
         ul->msgNbFilling++;
-        if (ul->msgNbFilling>= APP_CORE_MSG_MAX_NB) {
+        if (ul->msgNbFilling>= APP_CORE_UL_MAX_NB) {
             // too full
             return false;
         }
@@ -60,9 +60,9 @@ bool app_core_msg_ul_addTLV(APP_CORE_UL_t* ul, uint8_t t, uint8_t l, void* v) {
 }
 // Add TL and return pointer to V space unless too full
 uint8_t* app_core_msg_ul_addTLgetVP(APP_CORE_UL_t* ul, uint8_t t, uint8_t l) {
-    if ((ul->msgs[ul->msgNbFilling].sz + l + 2) > APP_CORE_MSG_MAX_SZ) {
+    if ((ul->msgs[ul->msgNbFilling].sz + l + 2) > APP_CORE_UL_MAX_SZ) {
         ul->msgNbFilling++;
-        if (ul->msgNbFilling>= APP_CORE_MSG_MAX_NB) {
+        if (ul->msgNbFilling>= APP_CORE_UL_MAX_NB) {
             // too full
             return false;
         }
@@ -76,17 +76,19 @@ uint8_t* app_core_msg_ul_addTLgetVP(APP_CORE_UL_t* ul, uint8_t t, uint8_t l) {
 }
 
 // return the size of the final UL
-uint8_t app_core_msg_ul_finalise(APP_CORE_UL_t* ul) {
+uint8_t app_core_msg_ul_finalise(APP_CORE_UL_t* ul, uint8_t lastDLId, bool willListen) {
     uint8_t ret = 0;
     ul->msbNbTxing++;
-    if (ul->msbNbTxing<APP_CORE_MSG_MAX_NB) {
+    if (ul->msbNbTxing<APP_CORE_UL_MAX_NB) {
         // 2 byte fixed header: 
-        //	0 : b0-3: ULrespid, b4-5: protocol version (0), b6: RFU(0), b7: force even parity for this byte
+        //	0 : b0-3: ULrespid, b4-5: protocol version (0), b6: 1=listening for DL, 0=not listening, b7: force even parity for this byte
         //	1 : length of following TLV block
         //	- allows backend to reliably (mostly) detect this type of message - if 1st byte parity=0 and 2nd byte value+2=message length then its probably this format....
         //	- 00 00 is the most basic valid message
-        ul->msgs[ul->msbNbTxing].payload[0] = (_ulRespId & 0x0f) | 0x00 | 0x00;
-        ul->msgs[ul->msbNbTxing].payload[0] |= evenParity(ul->msgs[ul->msbNbTxing].payload[0]);
+        ul->msgs[ul->msbNbTxing].payload[0] = (lastDLId & 0x0f) | 0x00 | (willListen?0x40:0x00);
+        if (!evenParity(ul->msgs[ul->msbNbTxing].payload[0])) {
+            ul->msgs[ul->msbNbTxing].payload[0] |= 0x80;        // not even, add parity bit
+        }
         ul->msgs[ul->msbNbTxing].payload[1] = (ul->msgs[ul->msbNbTxing].sz)-2;      // length of the TLV section
         ret = ul->msgs[ul->msbNbTxing].sz;
         // Must have msgNbTxing pointing to the message we have finalised
@@ -100,12 +102,41 @@ void app_core_msg_dl_init(APP_CORE_DL_t* dl) {
 }
 // Decode DL message but don't do anything with content
 bool app_core_msg_dl_decode(APP_CORE_DL_t* msg) {
-    // TODO - decode TLVs to end to check its an ok message
-    return true;        // all decoded ok
+    // decode TLVs to end to check its an ok message
+    if (!evenParity(msg->payload[0])) {
+        return false;       // not even parity
+    }
+    // Check protocol version
+    uint8_t pver = ((msg->payload[0] >> 4) & 0x03);
+    if (pver==0) {
+        // dlid in [1] in top 4 bits, nb actions in bottom 4
+        msg->dlId = ((msg->payload[1] >> 4) & 0x0f);
+        msg->nbActions = (msg->payload[1] & 0x0f);
+        return true;        // all decoded ok
+    }
+    // Don't know about any other versions
+    return false;
 }
 // Execute a DL message
 bool app_core_msg_dl_execute(APP_CORE_DL_t* msg) {
     // TODO - decode TLVs and execute relevant actions
+    int curoff = 2;
+    for(int i=0; i< msg->nbActions; i++) {
+        uint8_t action = msg->payload[curoff++];
+        uint8_t len = msg->payload[curoff++];
+        if (curoff+len > msg->sz) {
+            // badness - nb actions didn't match length of packet
+            log_debug("DLA exec : %d len %d @ %d > %d", action, len, curoff, msg->sz);
+            return false;
+        }
+        ACTIONFN_t afn = AppCore_findAction(action);
+        if (afn!=NULL) {
+            (*afn)(&msg->payload[curoff], len);
+        }
+        curoff+=len;
+    }
+
+    log_debug("DLA exec %d actions", msg->nbActions);
     return true;        // all executed ok
 }
 
