@@ -41,6 +41,7 @@ static uint32_t start() {
     log_debug("start env");
     // sensors that require power up or significant check time
     SRMgr_start();
+    MMMgr_check();
     log_debug("for 1s");
     return 1*1000;
 }
@@ -50,11 +51,11 @@ static void stop() {
     SRMgr_stop();
 }
 static void sleep() {
-    // TODO ensure sensors are low power mode
+    // ensure sensors are low power mode
     SRMgr_stop();
 }
 static void deepsleep() {
-    // TODO ensure sensors are off
+    // ensure sensors are off
     SRMgr_stop();
 }
 static bool getData(APP_CORE_UL_t* ul) {

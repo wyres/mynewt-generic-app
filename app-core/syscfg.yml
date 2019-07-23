@@ -17,17 +17,5 @@ syscfg.defs:
         description: "max number of modules allowed to register"
         value: 8
 
-    LOG_UART_ENABLED:
-        description: "is logging to a UART enabled?"
-        value: 0
-    LOG_UART:
-        description: "uart socket device name for logging output (from BSP)"
-        value: 'UARTDBG_DEV'
-    LOG_UART_BAUDRATE:
-        description: "baudrate for uart to use to log"
-        value: 19200
-    LOG_UART_SELECT:
-        description: "code for uart switcher for logging connector. Set to -1 if not using"
-        value: -1
 
 syscfg.vals:
