@@ -10,9 +10,8 @@
  * either express or implied. See the License for the specific 
  * language governing permissions and limitations under the License.
 */
-
-#ifndef H_MOD_BLE_H
-#define H_MOD_BLE_H
+#ifndef H_APP_CONSOLE_H
+#define H_APP_CONSOLE_H
 
 #include <inttypes.h>
 
@@ -20,13 +19,14 @@
 extern "C" {
 #endif
 
-#define BLE_TYPE_SHORT   (0x00)
-#define BLE_TYPE_COUNTABLE_START   (0x01)
-#define BLE_TYPE_COUNTABLE_END   (0x7F)
-#define BLE_TYPE_LONG   (0x80)
+// Wrapper on wconsole to group atcmds together
+void initConsole();
+void startConsole();
+void stopConsole();
+bool isConsoleActive();
 
 #ifdef __cplusplus
 }
 #endif
 
-#endif  /* H_MOD_BLE_H */
+#endif  /* H_APP_CONSOLE_H */

@@ -119,7 +119,7 @@ bool app_core_msg_dl_decode(APP_CORE_DL_t* msg) {
 }
 // Execute a DL message
 bool app_core_msg_dl_execute(APP_CORE_DL_t* msg) {
-    // TODO - decode TLVs and execute relevant actions
+    // decode TLVs and execute relevant actions
     int curoff = 2;
     for(int i=0; i< msg->nbActions; i++) {
         uint8_t action = msg->payload[curoff++];

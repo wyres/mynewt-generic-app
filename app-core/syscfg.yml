@@ -17,5 +17,17 @@ syscfg.defs:
         description: "max number of modules allowed to register"
         value: 8
 
+    WCONSOLE_ENABLED:
+        description: "enabled wconsole on uart during idle periods"
+        value: false
+    WCONSOLE_UART_DEV:
+        description: "uart device to open"
+        value: "null"
+    WCONSOLE_UART_BAUD:
+        description: "uart baud rate"
+        value: 19200
+    WCONSOLE_UART_SELECT:
+        description: "uart selector value"
+        value: -1
 
 syscfg.vals:

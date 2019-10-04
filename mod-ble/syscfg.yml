@@ -11,5 +11,17 @@ syscfg.defs:
     MOD_BLE_UART_SELECT:
         description: "code for uart switcher for BLE module: extio=1, spkr=1 (BUT SPKR INVERTED)"
         value: 1
+    MOD_BLE_MAXIBS_NAV:
+        description: "max number of ibeacons that can be sent in UL for navigation"
+        value: 3
+    MOD_BLE_MAXIBS_TAG_ENTER:
+        description: "max number of ibeacons that can be sent in UL for asset track"
+        value: 10
+    MOD_BLE_MAXIBS_TAG_EXIT:
+        description: "max number of ibeacons that can be sent in UL for asset track"
+        value: 10
+    MOD_BLE_MAXIBS_TAG_INZONE:
+        description: "max number of ibeacons that can be in a zone for asset track"
+        value: 25
 
 syscfg.vals:

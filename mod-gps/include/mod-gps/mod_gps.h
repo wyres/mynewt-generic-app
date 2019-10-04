@@ -20,6 +20,8 @@
 extern "C" {
 #endif
 
+typedef enum { FIX_ALWAYS, FIX_ON_STOP, FIX_WHILE_MOVING, FIX_ON_DEMAND } GPS_FIXMODE_t;
+
 #ifdef __cplusplus
 }
 #endif

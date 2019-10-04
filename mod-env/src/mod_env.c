@@ -38,16 +38,16 @@ static void buttonChangeCB();
 
 // My api functions
 static uint32_t start() {
-    log_debug("start env");
+    log_debug("ME:start env");
     // sensors that require power up or significant check time
     SRMgr_start();
     MMMgr_check();
-    log_debug("for 1s");
+    log_debug("ME:for 1s");
     return 1*1000;
 }
 
 static void stop() {
-    log_debug("done env");
+    log_debug("ME:done");
     SRMgr_stop();
 }
 static void sleep() {
@@ -59,17 +59,17 @@ static void deepsleep() {
     SRMgr_stop();
 }
 static bool getData(APP_CORE_UL_t* ul) {
-    log_debug("UL: add env");
+    log_info("ME: UL env");
     // if first N times after reboot, add reboot info
     if (_ctx.sentRebootInfo >0) {
         _ctx.sentRebootInfo--;
         // add to UL - last 8 reboot reasons
         uint8_t buf[8];
         RMMgr_getResetReasonBuffer(buf,8);
-        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_REBOOT, 8, buf);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_REBOOT, 8, buf);
         // last asset reason
         void* la = RMMgr_getLastAssertCallerFn();
-        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_LASTASSERT, sizeof(la), &la);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_LASTASSERT, sizeof(la), &la);
     }
     // get accelero if changed since last UL
     if (MMMgr_getLastMovedTime() >= AppCore_lastULTime()) {
@@ -79,7 +79,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         } v;
         v.lastMoveTS = MMMgr_getLastMovedTime();
         v.movePerUL = 1;       // TODO should record for last 8 ULs...
-        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_MOVE, sizeof(v), &v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_MOVE, sizeof(v), &v);
     }
     if (MMMgr_getLastFallTime() >= AppCore_lastULTime()) {
         struct {
@@ -88,7 +88,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         } v;
         v.lastFallTS = MMMgr_getLastFallTime();
         v.fallPerUL = 1;       // TODO should record for last 8 ULs...
-        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_FALL, sizeof(v), &v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_FALL, sizeof(v), &v);
     }
     if (MMMgr_getLastShockTime() >= AppCore_lastULTime()) {
         struct {
@@ -97,7 +97,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         } v;
         v.lastShockTS = MMMgr_getLastShockTime();
         v.shockPerUL = 1;       // TODO should record for last 8 ULs...
-        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_SHOCK, sizeof(v), &v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_SHOCK, sizeof(v), &v);
     }
     // orientation direct (if changed) 
     if (MMMgr_getLastOrientTime() >= AppCore_lastULTime()) {
@@ -111,38 +111,38 @@ static bool getData(APP_CORE_UL_t* ul) {
         v.x = MMMgr_getXdG();
         v.y = MMMgr_getYdG();
         v.z = MMMgr_getZdG();        
-        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_ORIENT, sizeof(v), &v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_ORIENT, sizeof(v), &v);
     }
     // Basic environmental stuff
     if (SRMgr_hasLightChanged()) {
         // get luminaire
         uint8_t vl = SRMgr_getLight();
-        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_LIGHT, sizeof(vl), &vl);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_LIGHT, sizeof(vl), &vl);
     }
     if (SRMgr_hasBattChanged()) {
         // get battery
         uint16_t vb = SRMgr_getBatterymV();
-        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_BATTERY, sizeof(vb), &vb);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_BATTERY, sizeof(vb), &vb);
     }
     if (SRMgr_hasPressureChanged()) {
         // get altimetre
         uint32_t vp = SRMgr_getPressurePa();
-        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_PRESSURE, sizeof(vp), &vp);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_PRESSURE, sizeof(vp), &vp);
     }
     if (SRMgr_hasTempChanged()) {
         // get temperature
         int16_t vt = SRMgr_getTempdC();
-        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_TEMP, sizeof(vt), &vt);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_TEMP, sizeof(vt), &vt);
     }
     if (SRMgr_hasADC1Changed()) {
         // get adc 1
         uint16_t vv1 = SRMgr_getADC1mV();
-        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_ADC1, sizeof(vv1), &vv1);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_ADC1, sizeof(vv1), &vv1);
     }
     if (SRMgr_hasADC2Changed()) {
         // get adc 2
         uint16_t vv2 = SRMgr_getADC2mV();
-        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_ADC2, sizeof(vv2), &vv2);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_ADC2, sizeof(vv2), &vv2);
     }
     // get micro if noise detected
     if (SRMgr_getLastNoiseTime() >= AppCore_lastULTime()) {
@@ -154,7 +154,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         v.time = SRMgr_getLastNoiseTime();
         v.freqkHz = SRMgr_getNoiseFreqkHz();
         v.leveldB = SRMgr_getNoiseLeveldB();
-        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_NOISE, sizeof(v), &v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_NOISE, sizeof(v), &v);
     }
 
     // get button
@@ -169,7 +169,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         v.releaseTS = SRMgr_getLastButtonReleaseTS();
         v.currState = SRMgr_getButton();
         v.lastPressType = SRMgr_getLastButtonPressType();
-        app_core_msg_ul_addTLV(ul, APP_CORE_ENV_BUTTON, sizeof(v), &v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_BUTTON, sizeof(v), &v);
     }
     return SRMgr_updateEnvs();     // update those that changed as we have added them to the UL... and return the flag that says if any changed
 }
@@ -197,12 +197,12 @@ static void buttonChangeCB() {
     uint8_t bs = SRMgr_getButton();
     if (bs==SR_BUTTON_RELEASED) {
         // note using log_noout as button shares GPIO with debug log uart...
-        log_noout("button released, duration %d ms, press type:%d", 
+        log_noout("ME:button released, duration %d ms, press type:%d", 
             (SRMgr_getLastButtonReleaseTS()-SRMgr_getLastButtonPressTS()),
             SRMgr_getLastButtonPressType());
         // ask for immediate UL
         AppCore_forceUL();
     } else {
-        log_noout("button pressed");
+        log_noout("ME:button pressed");
     }
 }

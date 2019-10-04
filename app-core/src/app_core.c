@@ -24,6 +24,7 @@
 #include "wyres-generic/timemgr.h"
 #include "wyres-generic/rebootMgr.h"
 
+#include "app-core/app_console.h"
 #include "app-core/app_core.h"
 #include "app-core/app_msg.h"
 
@@ -53,11 +54,13 @@ static struct appctx {
     uint32_t modSetupTimeSecs;
     uint32_t idleStartTS;
     uint32_t maxTimeBetweenULSecs;
+    bool doReboot;
     uint8_t nActions;
     ACTION_t actions[MAX_DL_ACTIONS];
     // ul response id : holds the last DL id we received. Sent in each UL to inform backend we got its DLs. 0=not listening
     uint8_t lastDLId;
 } _ctx = {
+    .doReboot=false,
     .nMods=0,
     .nActions=0,
     .idleTimeMovingSecs=5*60,           // 5mins
@@ -124,7 +127,12 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
     struct appctx* ctx = (struct appctx*)arg;
     switch(e) {
         case SM_ENTER: {
-            log_debug("idle %d s", ctx->idleTimeMovingSecs);
+            log_debug("AC:idle %d s", ctx->idleTimeMovingSecs);
+            if (ctx->doReboot) {
+                log_debug("AC:enter idle and reboot pending... bye bye....");
+                RMMgr_reboot(RM_DM_ACTION);
+                // Fall out just in case didn't actually reboot...
+            }
             // Stop all leds, and flash slow to show we're in sleep... this is for debug only
             ledStart(MYNEWT_VAL(MODS_ACTIVE_LED), FLASH_MIN, -1);
             ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_MIN, -1);
@@ -134,20 +142,29 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             sm_timer_start(ctx->mySMId, ctx->idleTimeMovingSecs*1000);
             // Record time
             ctx->idleStartTS = TMMgr_getRelTime();
+            //Initialise the DM we're sending next time -> this means executed actions can start to fill it during idle time
+            app_core_msg_ul_init(&ctx->txmsg);
+            ctx->ulIsCrit = false;       // assume we're not gonna send it (its not critical)
+            // activate console on the uart (if configured). get array size at compile time
+            startConsole();
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
+            stopConsole();
             // LEDs off
             ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
             ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
             // any low power when not idle will be basic sleeping (ie with radio and gpios on)
             LPMgr_setLPMode(LP_SLEEP);
-            //Initialise the DM we're sending
-            app_core_msg_ul_init(&ctx->txmsg);
-            ctx->ulIsCrit = false;       // assume we're not gonna send it (its not critical)
             return SM_STATE_CURRENT;
         }
         case SM_TIMEOUT: {
+            // Only do the loop if console not active, else set timer again
+            if (isConsoleActive()) {
+                log_debug("AC : console active not doing work");
+                sm_timer_start(ctx->mySMId, ctx->idleTimeMovingSecs*1000);
+                return SM_STATE_CURRENT;
+            } 
             // timeout -> did we move? deal with difference between moving and not moving times TODO
             return MS_GETTING_SERIAL_MODS;
         }
@@ -161,7 +178,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         default: {
-            log_debug("unknown event %d in state Idle", e);
+            log_debug("AC:unknown %d in Idle", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -184,12 +201,12 @@ static SM_STATE_ID_t State_GettingSerialMods(void* arg, int e, void* data) {
                         uint32_t timeReqd = (*(ctx->mods[i].api->startCB))();
                         // start timeout for current mod to get their data (short time)
                         sm_timer_start(ctx->mySMId, timeReqd);
-                        log_debug("Smod [%d] for %d ms", ctx->mods[i].id, timeReqd);
+                        log_debug("AC:Smod [%d] for %d ms", ctx->mods[i].id, timeReqd);
                         return SM_STATE_CURRENT;
                     }
                 }
             }
-            log_debug("no SMods");
+            log_debug("AC:no SMods");
             // No serial mods, force change to parallel ones
             ctx->currentSerialModIdx = -1;
             sm_sendEvent(ctx->mySMId, SM_TIMEOUT, NULL);
@@ -208,6 +225,7 @@ static SM_STATE_ID_t State_GettingSerialMods(void* arg, int e, void* data) {
             }
             // drop thru with data set to id of running guy
             data = (void*)(ctx->mods[ctx->currentSerialModIdx].id);
+            // !! DROP THRU INTENTIONAL !!
         }
         case ME_MODULE_DONE: {
             // get the id of the module what is done
@@ -224,21 +242,28 @@ static SM_STATE_ID_t State_GettingSerialMods(void* arg, int e, void* data) {
                         if (ctx->mods[i].exec == EXEC_SERIAL) {
                             ctx->currentSerialModIdx = i;
                             uint32_t timeReqd = (*(ctx->mods[i].api->startCB))();
-                            // start timeout for current mod to get their data
-                            sm_timer_start(ctx->mySMId, timeReqd);
-                            log_debug("Smod [%d] for %d ms", ctx->mods[i].id, timeReqd);
-                            return SM_STATE_CURRENT;
+                            // May return 0, which means no need for this module to run this time (no UL data)
+                            if (timeReqd==0) {
+                                // start timeout for current mod to get their data
+                                sm_timer_start(ctx->mySMId, timeReqd);
+                                log_debug("AC:Smod [%d] for %d ms", ctx->mods[i].id, timeReqd);
+                                return SM_STATE_CURRENT;
+                            } else {
+                                log_debug("AC:Smod [%d] says not this cycle", ctx->mods[i].id);
+                            }
                         }
                     }
                 }
                 // No more serial guys, go to parallels
                 return MS_GETTING_PARALLEL_MODS;
             } else {
-                log_debug("Smod %d done but not active [%d]", (int)data, ctx->mods[ctx->currentSerialModIdx].id);
+                log_warn("AC:Smod %d done but not active [%d]", (int)data, ctx->mods[ctx->currentSerialModIdx].id);
+                // this should not happen!
+                return MS_GETTING_PARALLEL_MODS;
             }
         }
         default: {
-            log_debug("unknown event %d in state getting serial mods", e);
+            log_debug("AC:unknown %d in GettingSerialMods", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -266,11 +291,11 @@ static SM_STATE_ID_t State_GettingParallelMods(void* arg, int e, void* data) {
             }
             if (modtime>0) {
                 // start timeout for current mods to get their data (short time)
-                log_debug("pmod for %d ms", modtime);
+                log_debug("AC:pmod for %d ms", modtime);
                 sm_timer_start(ctx->mySMId, modtime);
             } else {
                 // no parallel mods, timeout now
-                log_debug("no Pmods to check");
+                log_debug("AC:no Pmods to check");
                 sm_sendEvent(ctx->mySMId, SM_TIMEOUT, NULL);
             }
             return SM_STATE_CURRENT;
@@ -281,9 +306,8 @@ static SM_STATE_ID_t State_GettingParallelMods(void* arg, int e, void* data) {
         }
         case SM_TIMEOUT: {
             // Get data from active modules to build UL message
-            // !! how to mediate between modules that use same IOs eg I2C or UART (with UART selector)
-            // The accessed resource MUST provide a mutex type access control
-            
+            // Note that to mediate between modules that use same IOs eg I2C or UART (with UART selector)
+            // they should be "serial" type not parallel            
             for(int i=0;i<ctx->nMods;i++) {
                 if (isModActive(ctx->modsMask, ctx->mods[i].id)) {
                     if (ctx->mods[i].exec==EXEC_PARALLEL) {
@@ -304,7 +328,7 @@ static SM_STATE_ID_t State_GettingParallelMods(void* arg, int e, void* data) {
         }
 
         default: {
-            log_debug("unknown event %d in state parallel mods", e);
+            log_debug("AC:unknown %d in GettingParallelMods", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -316,7 +340,7 @@ static LORA_TX_RESULT_t tryTX(APP_CORE_UL_t* txmsg, uint8_t dlid, bool willListe
     if (txsz>0) {
         res = lora_app_tx(&(txmsg->msgs[txmsg->msbNbTxing].payload[0]), txsz, 8000);
     } else {
-        log_debug("no UL finalise said %d", txsz);
+        log_info("AC:no UL finalise said %d", txsz);
         res = LORA_TX_NO_TX;    // not an actual error but no tx so no point waiting for result
     }
     return res;
@@ -326,7 +350,7 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
 
     switch(e) {
         case SM_ENTER: {
-            log_debug("trying to send UL");
+            log_debug("AC:trying to send UL");
             // start leds for UL
             ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_5HZ, -1);
             LORA_TX_RESULT_t res = tryTX(&ctx->txmsg, ctx->lastDLId, true);
@@ -336,7 +360,7 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
                 // ok wait for result
             } else {
                 // want to abort immediately... send myself a result event
-                log_debug("send UL tx failed %d", res);
+                log_warn("AC:send UL tx failed %d", res);
                 sm_sendEvent(ctx->mySMId, ME_LORA_RESULT, (void*)res);    // pass the code as the value not as a pointer
             }
             return SM_STATE_CURRENT;
@@ -347,12 +371,18 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
         }
         case SM_TIMEOUT: {
             // Done , go idle
-            log_debug("done with UL send due to SM timeout");
+            log_info("AC:done with UL send due to SM timeout");
             return MS_IDLE;
         }
         case ME_LORA_RX: {
             if (data!=NULL) {
-                executeDL(ctx, (APP_CORE_DL_t*)data);
+                APP_CORE_DL_t* rxmsg = (APP_CORE_DL_t*)data;
+                // Execute actions if the dlid is not the last one we did
+                if (rxmsg->dlId!=ctx->lastDLId) {
+                    executeDL(ctx, rxmsg);
+                } else {
+                    log_debug("AC:ignore DL actions as id same as last time (%d)", rxmsg->dlId);
+                }
             }
             return SM_STATE_CURRENT;
         }
@@ -362,31 +392,32 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
             LORA_TX_RESULT_t res = ((LORA_TX_RESULT_t)data);
             switch (res) {
                 case LORA_TX_OK_ACKD: {
-                    log_debug("lora tx is ACKD, check next");
+                    log_info("AC:lora tx is ACKD, check next");
                     ctx->lastULTime = TMMgr_getRelTime();
                     break;
                 }
                 case LORA_TX_OK: {
-                    log_debug("lora tx is OK, check next");
+                    log_info("AC:lora tx is OK, check next");
                     ctx->lastULTime = TMMgr_getRelTime();
                     break;
                 }
                 case LORA_TX_ERR_NOTJOIN: {
                     // Retry join here? change the SF? TODO
-                    log_debug("lora tx fails as JOIN fail, going idle");
+                    log_warn("AC:lora tx fails as JOIN fail, going idle");
                     return MS_IDLE;
                 }
                 case LORA_TX_ERR_FATAL: {
-                    log_debug("lora tx result is FATAL ERROR, assert!");
+                    log_error("AC:lora tx result is FATAL ERROR, assert!");
                     assert(0);
                     return MS_IDLE;
                 }
                 default: {
+                    log_warn("AC:lora tx result %d not cased", res);
                     break; // fall out
                 }
             }
-            // See if we have another mssg to go. Not we say not listening ie don't send me DL as we haven't 
-            // processing any RX yet, so our 'lastDLId' is not up to date and we'll get a repated action DL!
+            // See if we have another mssg to go. Note we say 'not listening' ie don't send me DL as we haven't 
+            // processing any RX yet, so our 'lastDLId' is not up to date and we'll get a repeated action DL!
             res = tryTX(&ctx->txmsg, ctx->lastDLId, false);
             if (res==LORA_TX_OK) {
                 // this timer should be bigger than the one we give to the tx above... its a belt and braces job
@@ -394,13 +425,13 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
                 // ok wait for result
                 return SM_STATE_CURRENT;
             } else {
-                log_debug("lora tx UL res %d, going idle", res);
+                log_debug("AC:lora tx UL res %d, going idle", res);
                 // And we're done
                 return MS_IDLE;
             }
         }
         default: {
-            log_debug("unknown event %d in state sending DM", e);
+            log_debug("AC:unknown %d in SendingUL", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -416,7 +447,7 @@ static SM_STATE_t _mySM[MS_LAST] = {
 
 // Called to start the action, after all sysinit done
 void app_core_start() {
-    log_debug("init app-core");
+    log_debug("AC:init");
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMovingSecs, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_SECS, &_ctx.idleTimeNotMovingSecs, sizeof(uint32_t));
     memset(&_ctx.modsMask[0], 0xff, MOD_MASK_SZ);       // Default every module is active
@@ -438,6 +469,11 @@ void app_core_start() {
     // deveui etc are in PROM
     lora_app_init(lora_tx_cb, lora_rx_cb);
 
+    // initialise console for use during idle periods if enabled
+    if (MYNEWT_VAL(WCONSOLE_ENABLED)!=0) {
+        initConsole();
+    }
+
     // Do modules immediately on boot by starting in post-idle state
     _ctx.mySMId = sm_init("app-core", _mySM, MS_LAST, MS_IDLE, &_ctx);
     sm_start(_ctx.mySMId);
@@ -455,7 +491,26 @@ void AppCore_registerModule(APP_MOD_ID_t id, APP_CORE_API_t* mcbs, APP_MOD_EXEC_
     _ctx.mods[_ctx.nMods].id = id;
     _ctx.mods[_ctx.nMods].exec = execType;
     _ctx.nMods++;
-    log_debug("a-c add [%d] exec[%d]", id, execType);
+    log_debug("AC: add [%d] exec[%d]", id, execType);
+}
+
+// is module active?
+bool AppCore_getModuleState(APP_MOD_ID_t mid) {
+    return isModActive(_ctx.modsMask, mid);     // This is protected against bad mid values
+}
+// set module active/not active
+void AppCore_setModuleState(APP_MOD_ID_t mid, bool active) {
+    if (mid>=0 && mid<APP_MOD_LAST) {
+        if (active) {
+            // set the bit
+            _ctx.modsMask[mid/8] |= (1<<(mid%8));
+        } else {
+            // clear the bit
+            _ctx.modsMask[mid/8] &= ~(1<<(mid%8));
+        }
+        // And writeback to PROM
+        CFMgr_setElement(CFG_UTIL_KEY_MODS_ACTIVE_MASK, &_ctx.modsMask[0], MOD_MASK_SZ);
+    }
 }
 
 // register a DL action handler
@@ -472,7 +527,7 @@ void AppCore_registerAction(uint8_t id, ACTIONFN_t cb) {
     _ctx.actions[_ctx.nActions].id = id;
     _ctx.actions[_ctx.nActions].fn = cb;
     _ctx.nActions++;
-    log_debug("a-c reg action [%d]", id);
+    log_debug("AC: reg action [%d]", id);
 }
 // Find action fn or NULL
 ACTIONFN_t AppCore_findAction(uint8_t id) {
@@ -501,6 +556,19 @@ void AppCore_module_done(APP_MOD_ID_t id) {
     sm_sendEvent(_ctx.mySMId, ME_MODULE_DONE, (void*)id);
 }
 
+// Internals : action handling
+static void executeDL(struct appctx* ctx, APP_CORE_DL_t* data) {
+    if (app_core_msg_dl_execute(data)) {
+        log_info("AC: exec DL ok id now %d", data->dlId);
+        // Can update last dl id since we did its actions
+        ctx->lastDLId = data->dlId;
+        // Store in case we reboot
+        CFMgr_setElement(CFG_UTIL_KEY_DL_ID, &ctx->lastDLId, sizeof(uint8_t));
+    } else {
+        log_warn("AC: DL not exec OK");
+    }
+}
+
 // helper to read LE from buffer (may be 0 stripped)
 uint32_t readUINT32LE(uint8_t* b, uint8_t l) {
     uint32_t ret = 0;
@@ -511,46 +579,69 @@ uint32_t readUINT32LE(uint8_t* b, uint8_t l) {
     }
     return ret;
 }
-// Internals : action handling
-static void executeDL(struct appctx* ctx, APP_CORE_DL_t* data) {
-    if (app_core_msg_dl_execute(data)) {
-        log_debug("a-c exec DL ok id now %d", data->dlId);
-        // Can update last dl id since we did its actions
-        ctx->lastDLId = data->dlId;
-        // Store in case we reboot
-        CFMgr_setElement(CFG_UTIL_KEY_DL_ID, &ctx->lastDLId, sizeof(uint8_t));
-    } else {
-        log_debug("a-c DL not exec OK");
+uint16_t readUINT16LE(uint8_t* b, uint8_t l) {
+    uint16_t ret = 0;
+    for(int i=0;i<2;i++) {
+        if (b!=NULL && i<l) {
+            ret += (b[i] << 8*i);
+        } // else 0
     }
+    return ret;
 }
-
 static void A_reboot(uint8_t* v, uint8_t l) {
-    log_debug("action REBOOT");
-    // TODO must wait till execute actions finished!
-    // Send ourselves an event? or set timer to reboot?
-    //    RMMgr_reboot(RM_DM_ACTION);
+    log_info("action REBOOT");
+    // must wait till execute actions finished
+    _ctx.doReboot = true;
 }
 
 static void A_setConfig(uint8_t* v, uint8_t l) {
-    log_debug("action GETCONFIG (TBI)");
-    
+    if (l<3) {
+        log_warn("AC:action SETCONFIG BAD (too short value)");
+    }
+    // value is 2 bytes config id, l-2 bytes value to set
+    uint16_t key = readUINT16LE(v, 2);
+    if (CFMgr_setElement(key, v+2, l-2)) {
+        log_info("AC:action SETCONFIG (%d) to %d len value OK", key, l-2);
+    } else {
+        log_warn("AC:action SETCONFIG (%d) to %d len value FAILS", key, l-2);
+    }
 }
 
 static void A_getConfig(uint8_t* v, uint8_t l) {
-    log_debug("action GETCONFIG (TBI)");
+    if (l<2) {
+        log_warn("AC:action GETCONFIG BAD (too short value)");
+    }
+    // value is 2 bytes config id
+    uint16_t key = readUINT16LE(v, 2);
+    uint8_t vb[16];     // only allow to get keys up to 16 bytes..
+    int cl = CFMgr_getElement(key, vb, 16);
+    if (cl>0) {
+        log_info("AC:action GETCONFIG (%d) value [");
+        for(int i=0;i<cl;i++) {
+            log_info("%02x", vb[i]);
+        }
+        // Allowed to add to UL during action execution
+        if (app_core_msg_ul_addTLV(&_ctx.txmsg, APP_CORE_UL_CONFIG, cl, vb)) {
+            log_info("] added to UL");
+        } else {
+            log_warn("] could not be added to UL");
+        }
+    } else {
+            log_warn("AC:action GETCONFIG (%d) no such key");
+    }
 }
 static void A_fota(uint8_t* v, uint8_t l) {
-    log_debug("action FOTA (TBI)");
+    log_info("AC:action FOTA (TBI)");
 }
 static void A_settime(uint8_t* v, uint8_t l) {
-    log_debug("action SETTIME");
+    log_info("AC:action SETTIME");
     uint32_t now = readUINT32LE(v, l);
     // boot time in UTC is now - time elapsed since boot
     TMMgr_setBootTime(now - TMMgr_getRelTime());
 }
 
 static void A_getmods(uint8_t* v, uint8_t l) {
-    log_debug("action FOTA (TBI)");    
+    log_info("AC:action FOTA (TBI)");    
 }
 
 static void registerActions() {

@@ -32,8 +32,8 @@ void app_core_init(void) {
     res=uart_line_comm_create(UART0_DEV, MYNEWT_VAL(GPS_UART_BAUDRATE));
     assert(res);
 
-    log_warn("app init - reset %s, assert from [0x%08x]", 
-        RMMgr_getResetReason(), 
+    log_warn("app init - reset %04x, last assert at [0x%08x]", 
+        RMMgr_getResetReasonCode(), 
         RMMgr_getLastAssertCallerFn());
 
 }

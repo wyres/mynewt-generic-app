@@ -31,4 +31,6 @@ pkg.deps:
     - "@app-generic/app-core"
 
 pkg.init:
-    mod_ble_init : 992
+    mod_ble_scan_nav_init : 992
+    mod_ble_scan_tag_init : 992
+#    mod_ble_ibeacon_init : 992
