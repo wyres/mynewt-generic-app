@@ -268,15 +268,23 @@ static ATRESULT atcmd_listcmds(uint8_t nargs, char* argv[]) {
 void initConsole() {
     wconsole_mgr_init(MYNEWT_VAL(WCONSOLE_UART_DEV), MYNEWT_VAL(WCONSOLE_UART_BAUD), MYNEWT_VAL(WCONSOLE_UART_SELECT));
 }
-void startConsole() {
-    uint8_t cl = sizeof(ATCMDS)/sizeof(ATCMDS[0]);
-    log_debug("console state with %d commands", cl);
-    // start with our command set, no idle timeout
-    wconsole_start(cl, ATCMDS, 0);
+bool startConsole() {
+    if (wconsole_isInit()) {
+        uint8_t cl = sizeof(ATCMDS)/sizeof(ATCMDS[0]);
+        log_debug("AC:console starts with %d commands", cl);
+        // start with our command set, no idle timeout
+        wconsole_start(cl, ATCMDS, 0);
+        return true;
+    }
+    return false;       // not inited
 }
 void stopConsole() {
     wconsole_stop();
 }
+bool consoleIsInit() {
+    return wconsole_isInit();
+}
+
 bool isConsoleActive() {
     return wconsole_isActive();
 }

@@ -71,7 +71,7 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
         case WBLE_COMM_OK: {
             log_debug("MBT: comm ok");
             // Scan for both countable and enter/exit types. Note calculation depends on the BLE_TYPExXX values...
-            wble_scan_start(_ctx.wbleCtx, NULL, (BLE_TYPE_COUNTABLE_START<<8), (BLE_TYPE_LONG<<8) + 0xFF);
+            wble_scan_start(_ctx.wbleCtx, NULL, (BLE_TYPE_COUNTABLE_START<<8), (BLE_TYPE_ENTEREXIT<<8) + 0xFF);
             break;
         }
         case WBLE_SCAN_RX_IB: {
@@ -132,9 +132,9 @@ static bool getData(APP_CORE_UL_t* ul) {
     // for each one in the new scan list, update the current list, flagging new ones
     for(int i=0;i<nb;i++) {
         uint8_t bletype = (iblist[i].major & 0xff00) >> 8;
-        if (bletype==BLE_TYPE_SHORT) {
+        if (bletype==BLE_TYPE_NAV) {
             // ignore, shouldn't happen as the scanner was told to ignore these guys
-        } else if (bletype==BLE_TYPE_LONG) {
+        } else if (bletype==BLE_TYPE_ENTEREXIT) {
             // exit/enter long range type : if new, put as enter in the outgoing message, if not seen for last Xs, put in the exit list
             int idx = findIB(iblist[i].major, iblist[i].minor);
             if (idx<0) {

@@ -93,8 +93,8 @@ static bool isModActive(uint8_t* mask, APP_MOD_ID_t id) {
 }
 // application core state machine
 // Define my state ids
-enum MyStates { MS_IDLE, MS_GETTING_SERIAL_MODS, MS_GETTING_PARALLEL_MODS, MS_SENDING_UL, MS_LAST };
-enum MyEvents { ME_MODS_OK, ME_MODULE_DONE, ME_FORCE_UL, ME_LORA_RESULT, ME_LORA_RX };
+enum MyStates { MS_STARTUP, MS_IDLE, MS_GETTING_SERIAL_MODS, MS_GETTING_PARALLEL_MODS, MS_SENDING_UL, MS_LAST };
+enum MyEvents { ME_MODS_OK, ME_MODULE_DONE, ME_FORCE_UL, ME_LORA_RESULT, ME_LORA_RX, ME_CONSOLE_TIMEOUT };
 // related fns
 
 static void lora_tx_cb(LORA_TX_RESULT_t res) {
@@ -107,22 +107,67 @@ static void lora_rx_cb(uint8_t port, void* data, uint8_t sz) {
     // Copy data into static message buffer in ctx as sendEvent is executed off this thread -> can't use stack var.
     if (sz>APP_CORE_DL_MAX_SZ) {
         // oops
-        log_debug("lora rx toobig sz %d", sz);
+        log_debug("AC:lora rx toobig sz %d", sz);
         return;
     }
     memcpy(&_ctx.rxmsg.payload[0], data, sz);
     _ctx.rxmsg.sz = sz;
     // Decode it
     if (app_core_msg_dl_decode(&_ctx.rxmsg)) {
-        log_debug("lora rx dlid %d, na %d", _ctx.rxmsg.dlId, _ctx.rxmsg.nbActions);
+        log_debug("AC:lora rx dlid %d, na %d", _ctx.rxmsg.dlId, _ctx.rxmsg.nbActions);
         sm_sendEvent(_ctx.mySMId, ME_LORA_RX, (void*)(&_ctx.rxmsg));
     } else {
-        log_debug("lora rx BAD sz %d b0/1 %02x:%02x", sz, ((uint8_t*)data)[0], ((uint8_t*)data)[1]);
+        log_debug("AC:lora rx BAD sz %d b0/1 %02x:%02x", sz, ((uint8_t*)data)[0], ((uint8_t*)data)[1]);
     }
 }
 // SM state functions
 
-// ADD state for startup init, join+syncreq, etc before becoming idle
+// state for startup init, AT command line, etc before becoming idle
+static SM_STATE_ID_t State_Startup(void* arg, int e, void* data) {
+    struct appctx* ctx = (struct appctx*)arg;
+    switch(e) {
+        case SM_ENTER: {
+            log_debug("AC:START");
+            // Stop all leds, and flash slow to show we're in console... this is for debug only
+            ledStart(MYNEWT_VAL(MODS_ACTIVE_LED), FLASH_MIN, -1);
+            ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_MIN, -1);
+            // exit by timer if no at commands received
+            sm_timer_start(ctx->mySMId, 30*1000);
+
+            // activate console on the uart (if configured). 
+            if (startConsole()==false) {
+                // start directly
+                sm_sendEvent(ctx->mySMId, ME_FORCE_UL, NULL);
+            }
+            return SM_STATE_CURRENT;
+        }
+        case SM_EXIT: {
+            stopConsole();
+            // LEDs off
+            ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
+            ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
+            return SM_STATE_CURRENT;
+        }
+        case SM_TIMEOUT: {
+            // Only do the loop if console not active, else must do AT+RUN
+            if (isConsoleActive()) {
+                log_debug("AC : console active stays in startup mode");
+                return SM_STATE_CURRENT;
+            } 
+            // Starts by running the aquisitiion
+            return MS_GETTING_SERIAL_MODS;
+        }
+        case ME_FORCE_UL: {
+            return MS_GETTING_SERIAL_MODS;
+        }
+
+        default: {
+            log_debug("AC:unknown %d in Startup", e);
+            return SM_STATE_CURRENT;
+        }
+    }
+    assert(0);      // shouldn't get here
+}
 static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
     struct appctx* ctx = (struct appctx*)arg;
     switch(e) {
@@ -132,12 +177,14 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
                 log_debug("AC:enter idle and reboot pending... bye bye....");
                 RMMgr_reboot(RM_DM_ACTION);
                 // Fall out just in case didn't actually reboot...
+                log_error("AC: should have rebooted!");
+                assert(0);
             }
-            // Stop all leds, and flash slow to show we're in sleep... this is for debug only
-            ledStart(MYNEWT_VAL(MODS_ACTIVE_LED), FLASH_MIN, -1);
-            ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_MIN, -1);
-            // Set desired low power mode to be DEEP so it knows when mynewt says to sleep
-            LPMgr_setLPMode(LP_DEEPSLEEP);
+            if (ctx->idleTimeMovingSecs==0) {
+                // no idleness, this device runs continuously... (eg if its powered)
+                sm_sendEvent(ctx->mySMId, ME_FORCE_UL, NULL);
+                return SM_STATE_CURRENT;
+            }
             // Start the wakeup timeout TODO check if moved recently and use different timer
             sm_timer_start(ctx->mySMId, ctx->idleTimeMovingSecs*1000);
             // Record time
@@ -145,8 +192,22 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             //Initialise the DM we're sending next time -> this means executed actions can start to fill it during idle time
             app_core_msg_ul_init(&ctx->txmsg);
             ctx->ulIsCrit = false;       // assume we're not gonna send it (its not critical)
-            // activate console on the uart (if configured). get array size at compile time
-            startConsole();
+            // activate console on the uart (if configured). 
+            if (startConsole()) {
+                // Stop all leds, and flash slow to show we're in console
+                ledStart(MYNEWT_VAL(MODS_ACTIVE_LED), FLASH_MIN, -1);
+                ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_MIN, -1);
+                // Set desired low power mode to be just sleep as console is active for first period
+                LPMgr_setLPMode(LP_SLEEP);
+                    // start timer for specific event to turn off console if not activated
+                sm_timer_startE(ctx->mySMId, 10000, ME_CONSOLE_TIMEOUT);
+            } else {
+                // LEDs off, we are sleeping
+                ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
+                ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
+                // and stay idle in deep sleep this time
+                LPMgr_setLPMode(LP_DEEPSLEEP);
+            }
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
@@ -154,8 +215,8 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             // LEDs off
             ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
             ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
-            // any low power when not idle will be basic sleeping (ie with radio and gpios on)
-            LPMgr_setLPMode(LP_SLEEP);
+            // any low power when not idle will be basic low power MCU (ie with radio and gpios on)
+            LPMgr_setLPMode(LP_DOZE);
             return SM_STATE_CURRENT;
         }
         case SM_TIMEOUT: {
@@ -167,6 +228,20 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             } 
             // timeout -> did we move? deal with difference between moving and not moving times TODO
             return MS_GETTING_SERIAL_MODS;
+        }
+        // you only get Xs to use console then goes to sleep properly
+        case ME_CONSOLE_TIMEOUT: {
+            if (!isConsoleActive()) {
+                log_debug("AC: console timeout");
+                // No more uarting
+                stopConsole();
+                // LEDs off
+                ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
+                ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
+                // and stay idle in deep sleep this time
+                LPMgr_setLPMode(LP_DEEPSLEEP);
+            } // else console in use, so user must do explicit exit by AT+RUN or wait for global timeout after inactivity
+            return SM_STATE_CURRENT;
         }
         case ME_FORCE_UL: {
             return MS_GETTING_SERIAL_MODS;
@@ -184,7 +259,6 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
     }
     assert(0);      // shouldn't get here
 }
-
 // Get all the modules that require to be executed in series
 static SM_STATE_ID_t State_GettingSerialMods(void* arg, int e, void* data) {
     struct appctx* ctx = (struct appctx*)arg;
@@ -192,24 +266,9 @@ static SM_STATE_ID_t State_GettingSerialMods(void* arg, int e, void* data) {
     switch(e) {
         case SM_ENTER: {
             ledStart(MYNEWT_VAL(MODS_ACTIVE_LED), FLASH_2HZ, -1);
-            // find first serial guy
-            for(int i=0;i<ctx->nMods;i++) {
-//                log_debug("Smod %d mask %x", ctx->mods[i].id,  ctx->modsMask[0]);
-                if (isModActive(ctx->modsMask, ctx->mods[i].id)) {
-                    if (ctx->mods[i].exec == EXEC_SERIAL) {
-                        ctx->currentSerialModIdx = i;
-                        uint32_t timeReqd = (*(ctx->mods[i].api->startCB))();
-                        // start timeout for current mod to get their data (short time)
-                        sm_timer_start(ctx->mySMId, timeReqd);
-                        log_debug("AC:Smod [%d] for %d ms", ctx->mods[i].id, timeReqd);
-                        return SM_STATE_CURRENT;
-                    }
-                }
-            }
-            log_debug("AC:no SMods");
-            // No serial mods, force change to parallel ones
+            // find first serial guy by sending ourselves the done event with idx=-1
             ctx->currentSerialModIdx = -1;
-            sm_sendEvent(ctx->mySMId, SM_TIMEOUT, NULL);
+            sm_sendEvent(ctx->mySMId, ME_MODULE_DONE, NULL);
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
@@ -228,39 +287,41 @@ static SM_STATE_ID_t State_GettingSerialMods(void* arg, int e, void* data) {
             // !! DROP THRU INTENTIONAL !!
         }
         case ME_MODULE_DONE: {
-            // get the id of the module what is done
-            // check its the one we're waiting for
-            if ((int)data == ctx->mods[ctx->currentSerialModIdx].id) {
-//                log_debug("done Smod %d, id %d ", ctx->currentSerialModIdx, (int)data);
-                // Get the data
-                ctx->ulIsCrit |= (*(ctx->mods[ctx->currentSerialModIdx].api->getULDataCB))(&ctx->txmsg);
-                // stop any activity
-                (*(ctx->mods[ctx->currentSerialModIdx].api->stopCB))();
-                // Find next serial one
-                for(int i=(ctx->currentSerialModIdx+1);i<ctx->nMods;i++) {
-                    if (isModActive(ctx->modsMask, ctx->mods[i].id)) {
-                        if (ctx->mods[i].exec == EXEC_SERIAL) {
-                            ctx->currentSerialModIdx = i;
-                            uint32_t timeReqd = (*(ctx->mods[i].api->startCB))();
-                            // May return 0, which means no need for this module to run this time (no UL data)
-                            if (timeReqd==0) {
-                                // start timeout for current mod to get their data
-                                sm_timer_start(ctx->mySMId, timeReqd);
-                                log_debug("AC:Smod [%d] for %d ms", ctx->mods[i].id, timeReqd);
-                                return SM_STATE_CURRENT;
-                            } else {
-                                log_debug("AC:Smod [%d] says not this cycle", ctx->mods[i].id);
-                            }
+            // get the id of the module what is done (the ID is the 'data' param's value)
+            // check its the one we're waiting for (if not first time)
+            if (ctx->currentSerialModIdx > 0) {
+                if ((int)data == ctx->mods[ctx->currentSerialModIdx].id) {
+    //                log_debug("done Smod %d, id %d ", ctx->currentSerialModIdx, (int)data);
+                    // Get the data
+                    ctx->ulIsCrit |= (*(ctx->mods[ctx->currentSerialModIdx].api->getULDataCB))(&ctx->txmsg);
+                    // stop any activity
+                    (*(ctx->mods[ctx->currentSerialModIdx].api->stopCB))();
+                } else {
+                    log_warn("AC:Smod %d done but not active [%d]", (int)data, ctx->mods[ctx->currentSerialModIdx].id);
+                    // this should not happen!
+                    return MS_GETTING_PARALLEL_MODS;
+                }
+            }
+            // Find next serial one to run or goto parallels if all done
+            for(int i=(ctx->currentSerialModIdx+1);i<ctx->nMods;i++) {
+                if (isModActive(ctx->modsMask, ctx->mods[i].id)) {
+                    if (ctx->mods[i].exec == EXEC_SERIAL) {
+                        ctx->currentSerialModIdx = i;
+                        uint32_t timeReqd = (*(ctx->mods[i].api->startCB))();
+                        // May return 0, which means no need for this module to run this time (no UL data)
+                        if (timeReqd!=0) {
+                            // start timeout for current mod to get their data
+                            sm_timer_start(ctx->mySMId, timeReqd);
+                            log_debug("AC:Smod [%d] for %d ms", ctx->mods[i].id, timeReqd);
+                            return SM_STATE_CURRENT;
+                        } else {
+                            log_debug("AC:Smod [%d] says not this cycle", ctx->mods[i].id);
                         }
                     }
                 }
-                // No more serial guys, go to parallels
-                return MS_GETTING_PARALLEL_MODS;
-            } else {
-                log_warn("AC:Smod %d done but not active [%d]", (int)data, ctx->mods[ctx->currentSerialModIdx].id);
-                // this should not happen!
-                return MS_GETTING_PARALLEL_MODS;
             }
+            // No more serial guys, go to parallels
+            return MS_GETTING_PARALLEL_MODS;
         }
         default: {
             log_debug("AC:unknown %d in GettingSerialMods", e);
@@ -439,6 +500,7 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
 }
 // State table : note can be in any order as the 'id' field is what maps the state id to the rest
 static SM_STATE_t _mySM[MS_LAST] = {
+    {.id=MS_STARTUP,       .name="Startup",   .fn=State_Startup},
     {.id=MS_IDLE,           .name="Idle",       .fn=State_Idle},
     {.id=MS_GETTING_SERIAL_MODS,    .name="GettingSerialMods", .fn=State_GettingSerialMods},
     {.id=MS_GETTING_PARALLEL_MODS,    .name="GettingParallelMods", .fn=State_GettingParallelMods},
@@ -475,10 +537,8 @@ void app_core_start() {
     }
 
     // Do modules immediately on boot by starting in post-idle state
-    _ctx.mySMId = sm_init("app-core", _mySM, MS_LAST, MS_IDLE, &_ctx);
+    _ctx.mySMId = sm_init("app-core", _mySM, MS_LAST, MS_STARTUP, &_ctx);
     sm_start(_ctx.mySMId);
-    // Do UL immediately on boot
-    AppCore_forceUL();
 }
 
 // core api for modules
@@ -493,6 +553,7 @@ void AppCore_registerModule(APP_MOD_ID_t id, APP_CORE_API_t* mcbs, APP_MOD_EXEC_
     _ctx.nMods++;
     log_debug("AC: add [%d] exec[%d]", id, execType);
 }
+
 
 // is module active?
 bool AppCore_getModuleState(APP_MOD_ID_t mid) {

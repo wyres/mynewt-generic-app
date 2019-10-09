@@ -87,7 +87,7 @@ static void gps_cb(GPS_EVENT_TYPE_t e) {
 static uint32_t start() {
     uint32_t coldStartTime=2*60;
     uint32_t warmStartTime=60;
-    uint8_t powermode = POWER_ALWAYSON;     //POWER_ONOFF;
+    uint8_t powermode = POWER_ONOFF;     
     uint8_t fixmode = FIX_ALWAYS; // FIX_ON_DEMAND;
     CFMgr_getOrAddElement(CFG_UTIL_KEY_GPS_COLD_TIME_SECS, &coldStartTime, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_GPS_WARM_TIME_SECS, &warmStartTime, sizeof(uint32_t));
@@ -128,11 +128,12 @@ static uint32_t start() {
     // Depending on fix mode, we start GPS or not this time round...
     if (doFix) {
         // leaving to do somehting with the GPS, so tell it to go with a callback to tell me when its got something
-        // If we had a lock before, and it was <24 hours, we should get a fix rapidly (if we can)
-        gpstimeout = warmStartTime + (fixage/24);      // adjust minimum fix time by up to 60s if last fix is old
         if (fixage<0 || fixage > 24*60) {
             // no fix last time, or was too long ago - could take 5 mins to find satellites?
             gpstimeout = coldStartTime;
+        } else {
+            // If we had a lock before, and it was <24 hours, we should get a fix rapidly (if we can)
+            gpstimeout = warmStartTime + (fixage/24);      // adjust minimum fix time by up to 60s if last fix is old
         }
     //    log_debug("mod-gps last %d m - next fix in %d s", fixage, gpstimeout);
         gps_start(gps_cb, 0);

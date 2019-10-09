@@ -21,8 +21,9 @@ extern "C" {
 
 // Wrapper on wconsole to group atcmds together
 void initConsole();
-void startConsole();
+bool startConsole();
 void stopConsole();
+bool consoleIsInit();
 bool isConsoleActive();
 
 #ifdef __cplusplus

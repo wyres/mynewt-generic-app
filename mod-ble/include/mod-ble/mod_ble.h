@@ -20,10 +20,10 @@
 extern "C" {
 #endif
 
-#define BLE_TYPE_SHORT   (0x00)
+#define BLE_TYPE_NAV   (0x00)
 #define BLE_TYPE_COUNTABLE_START   (0x01)
 #define BLE_TYPE_COUNTABLE_END   (0x7F)
-#define BLE_TYPE_LONG   (0x80)
+#define BLE_TYPE_ENTEREXIT   (0x80)
 
 #ifdef __cplusplus
 }

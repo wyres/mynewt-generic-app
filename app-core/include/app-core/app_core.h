@@ -38,7 +38,7 @@ typedef struct {
 } APP_CORE_API_t;
 
 // Add module ids here (before the APP_MOD_LAST enum)
-typedef enum { APP_MOD_ENV=0, APP_MOD_GPS, APP_MOD_BLE_SCAN_NAV, APP_MOD_BLE_SCAN_TAGS, APP_MOD_BLE_IB, APP_MOD_IO, APP_MOD_LORA, APP_MOD_LAST } APP_MOD_ID_t;
+typedef enum { APP_MOD_ENV=0, APP_MOD_GPS=1, APP_MOD_BLE_SCAN_NAV=2, APP_MOD_BLE_SCAN_TAGS=3, APP_MOD_BLE_IB=4, APP_MOD_IO=5, APP_MOD_LORA=6, APP_MOD_LAST } APP_MOD_ID_t;
 // Should module be run in parallel with others, or must it be alone (eg coz using a shared resource like a bus)?
 typedef enum { EXEC_PARALLEL, EXEC_SERIAL } APP_MOD_EXEC_t;
 // core api for modules
@@ -60,24 +60,24 @@ void AppCore_registerAction(uint8_t id, ACTIONFN_t cb);
 // Find an action handler or NULL
 ACTIONFN_t AppCore_findAction(uint8_t id);
 
-// app core TLV tags for UL
-typedef enum { APP_CORE_UL_VERSION=0, APP_CORE_UL_UPTIME, APP_CORE_UL_CONFIG,
-    APP_CORE_UL_ENV_TEMP, APP_CORE_UL_ENV_PRESSURE, APP_CORE_UL_ENV_HUMIDITY, APP_CORE_UL_ENV_LIGHT, 
-    APP_CORE_UL_ENV_BATTERY, APP_CORE_UL_ENV_ADC1, APP_CORE_UL_ENV_ADC2, 
-    APP_CORE_UL_ENV_NOISE, APP_CORE_UL_ENV_BUTTON, 
-    APP_CORE_UL_ENV_MOVE, APP_CORE_UL_ENV_FALL, APP_CORE_UL_ENV_SHOCK, APP_CORE_UL_ENV_ORIENT, 
-    APP_CORE_UL_ENV_REBOOT, APP_CORE_UL_ENV_LASTASSERT,
-    APP_CORE_UL_BLE_CURR, APP_CORE_UL_BLE_ENTER, APP_CORE_UL_BLE_EXIT, APP_CORE_UL_BLE_COUNT,
-    APP_CORE_UL_GPS
+// app core TLV tags for UL : 1 byte sized, explicit values assigned, never change already allocated values!
+typedef enum { APP_CORE_UL_VERSION=0, APP_CORE_UL_UPTIME=1, APP_CORE_UL_CONFIG=2,
+    APP_CORE_UL_ENV_TEMP=3, APP_CORE_UL_ENV_PRESSURE=4, APP_CORE_UL_ENV_HUMIDIT=5, APP_CORE_UL_ENV_LIGHT=6, 
+    APP_CORE_UL_ENV_BATTERY=7, APP_CORE_UL_ENV_ADC1=8, APP_CORE_UL_ENV_ADC2=9, 
+    APP_CORE_UL_ENV_NOISE=10, APP_CORE_UL_ENV_BUTTON=11, 
+    APP_CORE_UL_ENV_MOVE=12, APP_CORE_UL_ENV_FALL=13, APP_CORE_UL_ENV_SHOCK=14, APP_CORE_UL_ENV_ORIENT=15, 
+    APP_CORE_UL_ENV_REBOOT=16, APP_CORE_UL_ENV_LASTASSERT=17,
+    APP_CORE_UL_BLE_CURR=18, APP_CORE_UL_BLE_ENTER=19, APP_CORE_UL_BLE_EXIT=20, APP_CORE_UL_BLE_COUNT=21,
+    APP_CORE_UL_GPS=22
 } APP_CORE_UL_TAGS;
-// app core TLV tags for DL
+// app core TLV tags for DL : 1 byte sized, never change already allocated values!
 // App core has handlers for up to GET_MODS
-typedef enum { APP_CORE_DL_REBOOT=1, APP_CORE_DL_SET_CONFIG, APP_CORE_DL_GET_CONFIG,         
-    APP_CORE_DL_SET_UTCTIME, APP_CORE_DL_FOTA, APP_CORE_DL_GET_MODS, APP_CORE_DL_FIX_GPS                  
+typedef enum { APP_CORE_DL_REBOOT=1, APP_CORE_DL_SET_CONFIG=2, APP_CORE_DL_GET_CONFIG=3,         
+    APP_CORE_DL_SET_UTCTIME=4, APP_CORE_DL_FOTA=5, APP_CORE_DL_GET_MODS=6, APP_CORE_DL_FIX_GPS=7
 } APP_CORE_DL_TAGS;
 
 
-// Configuration keys used by core
+// Configuration keys used by core - add to end of list as required. Never alter already assigned values.
 #define CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS      CFGKEY(CFG_MODULE_APP_CORE, 1)
 #define CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_SECS   CFGKEY(CFG_MODULE_APP_CORE, 2)
 #define CFG_UTIL_KEY_MODSETUP_TIME_SECS         CFGKEY(CFG_MODULE_APP_CORE, 3)
@@ -85,7 +85,7 @@ typedef enum { APP_CORE_DL_REBOOT=1, APP_CORE_DL_SET_CONFIG, APP_CORE_DL_GET_CON
 #define CFG_UTIL_KEY_MAXTIME_UL_SECS            CFGKEY(CFG_MODULE_APP_CORE, 5)
 #define CFG_UTIL_KEY_DL_ID                      CFGKEY(CFG_MODULE_APP_CORE, 6)
 
-// Configuration keys used by modules - add to end of list
+// Configuration keys used by modules - add to end of list as required. Never alter already assigned values.
 #define CFG_UTIL_KEY_BLE_SCAN_TIME_SECS          CFGKEY(CFG_MODULE_APP_MOD, 1)
 #define CFG_UTIL_KEY_GPS_COLD_TIME_SECS          CFGKEY(CFG_MODULE_APP_MOD, 2)
 #define CFG_UTIL_KEY_GPS_WARM_TIME_SECS          CFGKEY(CFG_MODULE_APP_MOD, 3)

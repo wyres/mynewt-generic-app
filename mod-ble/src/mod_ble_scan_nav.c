@@ -42,7 +42,7 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
         case WBLE_COMM_OK: {
             log_debug("MBN: comm ok");
             // Scan selecting only majors between 0x0000 and 0x00FF ie short range
-            wble_scan_start(_ctx.wbleCtx, NULL, (BLE_TYPE_SHORT<<8), ((BLE_TYPE_SHORT<<8)+0xFF));
+            wble_scan_start(_ctx.wbleCtx, NULL, (BLE_TYPE_NAV<<8), ((BLE_TYPE_NAV<<8)+0xFF));
             break;
         }
         case WBLE_SCAN_RX_IB: {
