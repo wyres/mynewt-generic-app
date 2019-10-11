@@ -17,10 +17,10 @@
 
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/L96I2Ccomm.h"
-#include "wyres-generic/uartLineMgr.h"
+#include "wyres-generic/uartlinemgr.h"
 #include "wyres-generic/timemgr.h"
-#include "wyres-generic/rebootMgr.h"
-#include "wyres-generic/uartSelector.h"
+#include "wyres-generic/rebootmgr.h"
+#include "wyres-generic/uartselector.h"
 
 /**
  *  create devices for app level. Called once base system is up, but before modules/core are initialised

@@ -16,11 +16,11 @@
 #include "bsp.h"
 
 #include "wyres-generic/wutils.h"
-#include "wyres-generic/rebootMgr.h"
+#include "wyres-generic/rebootmgr.h"
 #include "wyres-generic/wconsole.h"
-#include "wyres-generic/configMgr.h"
-#include "wyres-generic/timeMgr.h"
-#include "wyres-generic/sensorMgr.h"
+#include "wyres-generic/configmgr.h"
+#include "wyres-generic/timemgr.h"
+#include "wyres-generic/sensormgr.h"
 #include "wyres-generic/loraapp.h"
 
 #include "app-core/app_core.h"

@@ -17,9 +17,9 @@
 #include "os/os.h"
 
 #include "wyres-generic/wutils.h"
-#include "wyres-generic/rebootMgr.h"
+#include "wyres-generic/rebootmgr.h"
 #include "wyres-generic/movementmgr.h"
-#include "wyres-generic/sensorMgr.h"
+#include "wyres-generic/sensormgr.h"
 
 #include "app-core/app_core.h"
 #include "app-core/app_msg.h"

@@ -23,7 +23,7 @@
 #include "wyres-generic/lowpowermgr.h"
 #include "wyres-generic/loraapp.h"
 #include "wyres-generic/timemgr.h"
-#include "wyres-generic/rebootMgr.h"
+#include "wyres-generic/rebootmgr.h"
 
 #include "app-core/app_console.h"
 #include "app-core/app_core.h"
