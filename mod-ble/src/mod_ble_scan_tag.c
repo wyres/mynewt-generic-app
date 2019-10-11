@@ -91,10 +91,10 @@ static uint32_t start() {
     // and tell ble to go with a callback to tell me when its got something
     wble_start(_ctx.wbleCtx, ble_cb);
     // Return the scan time
-    uint32_t bleScanTime = 3;
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_SCAN_TIME_SECS, &bleScanTime, sizeof(uint32_t));
+    uint32_t bleScanTimeMS = 3000;
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_SCAN_TIME_MS, &bleScanTimeMS, sizeof(uint32_t));
 
-    return bleScanTime*1000;
+    return bleScanTimeMS;
 }
 
 static void stop() {

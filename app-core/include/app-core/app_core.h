@@ -70,23 +70,23 @@ typedef enum { APP_CORE_UL_VERSION=0, APP_CORE_UL_UPTIME=1, APP_CORE_UL_CONFIG=2
     APP_CORE_UL_BLE_CURR=18, APP_CORE_UL_BLE_ENTER=19, APP_CORE_UL_BLE_EXIT=20, APP_CORE_UL_BLE_COUNT=21,
     APP_CORE_UL_GPS=22
 } APP_CORE_UL_TAGS;
-// app core TLV tags for DL : 1 byte sized, never change already allocated values!
+// app core TLV tags for DL : 1 byte sized, never change already allocated values! Note some are historic values
 // App core has handlers for up to GET_MODS
 typedef enum { APP_CORE_DL_REBOOT=1, APP_CORE_DL_SET_CONFIG=2, APP_CORE_DL_GET_CONFIG=3,         
-    APP_CORE_DL_SET_UTCTIME=4, APP_CORE_DL_FOTA=5, APP_CORE_DL_GET_MODS=6, APP_CORE_DL_FIX_GPS=7
+    APP_CORE_DL_SET_UTCTIME=24, APP_CORE_DL_FOTA=25, APP_CORE_DL_GET_MODS=26, APP_CORE_DL_FIX_GPS=11
 } APP_CORE_DL_TAGS;
 
 
 // Configuration keys used by core - add to end of list as required. Never alter already assigned values.
 #define CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS      CFGKEY(CFG_MODULE_APP_CORE, 1)
-#define CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_SECS   CFGKEY(CFG_MODULE_APP_CORE, 2)
+#define CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_MINS   CFGKEY(CFG_MODULE_APP_CORE, 2)
 #define CFG_UTIL_KEY_MODSETUP_TIME_SECS         CFGKEY(CFG_MODULE_APP_CORE, 3)
 #define CFG_UTIL_KEY_MODS_ACTIVE_MASK           CFGKEY(CFG_MODULE_APP_CORE, 4)
-#define CFG_UTIL_KEY_MAXTIME_UL_SECS            CFGKEY(CFG_MODULE_APP_CORE, 5)
+#define CFG_UTIL_KEY_MAXTIME_UL_MINS            CFGKEY(CFG_MODULE_APP_CORE, 5)
 #define CFG_UTIL_KEY_DL_ID                      CFGKEY(CFG_MODULE_APP_CORE, 6)
 
 // Configuration keys used by modules - add to end of list as required. Never alter already assigned values.
-#define CFG_UTIL_KEY_BLE_SCAN_TIME_SECS          CFGKEY(CFG_MODULE_APP_MOD, 1)
+#define CFG_UTIL_KEY_BLE_SCAN_TIME_MS          CFGKEY(CFG_MODULE_APP_MOD, 1)
 #define CFG_UTIL_KEY_GPS_COLD_TIME_SECS          CFGKEY(CFG_MODULE_APP_MOD, 2)
 #define CFG_UTIL_KEY_GPS_WARM_TIME_SECS          CFGKEY(CFG_MODULE_APP_MOD, 3)
 #define CFG_UTIL_KEY_GPS_POWER_MODE               CFGKEY(CFG_MODULE_APP_MOD, 4)

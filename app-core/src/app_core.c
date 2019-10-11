@@ -18,6 +18,7 @@
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/configmgr.h"
 #include "wyres-generic/ledmgr.h"
+#include "wyres-generic/movementmgr.h"
 #include "wyres-generic/sm_exec.h"
 #include "wyres-generic/lowpowermgr.h"
 #include "wyres-generic/loraapp.h"
@@ -50,10 +51,10 @@ static struct appctx {
     APP_CORE_DL_t rxmsg;        // for decoding DL messages
     uint32_t lastULTime;        // timestamp of last uplink
     uint32_t idleTimeMovingSecs;
-    uint32_t idleTimeNotMovingSecs;
+    uint32_t idleTimeNotMovingMins;
     uint32_t modSetupTimeSecs;
     uint32_t idleStartTS;
-    uint32_t maxTimeBetweenULSecs;
+    uint32_t maxTimeBetweenULMins;
     bool doReboot;
     uint8_t nActions;
     ACTION_t actions[MAX_DL_ACTIONS];
@@ -64,9 +65,9 @@ static struct appctx {
     .nMods=0,
     .nActions=0,
     .idleTimeMovingSecs=5*60,           // 5mins
-    .idleTimeNotMovingSecs=120*60,      // 2 hours
+    .idleTimeNotMovingMins=120,      // 2 hours
     .modSetupTimeSecs=3,
-    .maxTimeBetweenULSecs=15*60,    // 15 mins
+    .maxTimeBetweenULMins=120,    // 2 hours
     .lastULTime=0,
     .lastDLId=0,            // default when new, will be read from the config mgr
 };
@@ -80,9 +81,9 @@ static void configChangedCB(uint16_t key) {
     // just re-get all my config in case it changed
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MODS_ACTIVE_MASK, &_ctx.modsMask[0], MOD_MASK_SZ);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMovingSecs, sizeof(uint32_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_SECS, &_ctx.idleTimeNotMovingSecs, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_MINS, &_ctx.idleTimeNotMovingMins, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MODSETUP_TIME_SECS, &_ctx.modSetupTimeSecs, sizeof(uint32_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_MAXTIME_UL_SECS, &_ctx.maxTimeBetweenULSecs, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_MAXTIME_UL_MINS, &_ctx.maxTimeBetweenULMins, sizeof(uint32_t));
 
 }
 static bool isModActive(uint8_t* mask, APP_MOD_ID_t id) {
@@ -172,7 +173,6 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
     struct appctx* ctx = (struct appctx*)arg;
     switch(e) {
         case SM_ENTER: {
-            log_debug("AC:idle %d s", ctx->idleTimeMovingSecs);
             if (ctx->doReboot) {
                 log_debug("AC:enter idle and reboot pending... bye bye....");
                 RMMgr_reboot(RM_DM_ACTION);
@@ -180,18 +180,25 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
                 log_error("AC: should have rebooted!");
                 assert(0);
             }
-            if (ctx->idleTimeMovingSecs==0) {
-                // no idleness, this device runs continuously... (eg if its powered)
-                sm_sendEvent(ctx->mySMId, ME_FORCE_UL, NULL);
-                return SM_STATE_CURRENT;
-            }
-            // Start the wakeup timeout TODO check if moved recently and use different timer
-            sm_timer_start(ctx->mySMId, ctx->idleTimeMovingSecs*1000);
-            // Record time
-            ctx->idleStartTS = TMMgr_getRelTime();
             //Initialise the DM we're sending next time -> this means executed actions can start to fill it during idle time
             app_core_msg_ul_init(&ctx->txmsg);
             ctx->ulIsCrit = false;       // assume we're not gonna send it (its not critical)
+            if (ctx->idleTimeMovingSecs==0) {
+                // no idleness, this device runs continuously... (eg if its powered)
+                log_debug("AC:no idle");
+                sm_sendEvent(ctx->mySMId, ME_FORCE_UL, NULL);
+                return SM_STATE_CURRENT;
+            }
+            // Start the wakeup timeout 
+            uint32_t idletimeMS = ctx->idleTimeMovingSecs*1000;
+            // check if moved recently and use different timeout
+            if (!MMMgr_hasMovedSince(ctx->lastULTime)) {
+                idletimeMS = ctx->idleTimeNotMovingMins * 60000;
+            }
+            sm_timer_start(ctx->mySMId, idletimeMS);
+            log_debug("AC:idle %d ms", idletimeMS);
+            // Record time
+            ctx->idleStartTS = TMMgr_getRelTime();
             // activate console on the uart (if configured). 
             if (startConsole()) {
                 // Stop all leds, and flash slow to show we're in console
@@ -380,7 +387,7 @@ static SM_STATE_ID_t State_GettingParallelMods(void* arg, int e, void* data) {
                 }
             }
             // critical to send it if been a while since last one
-            ctx->ulIsCrit |= ((TMMgr_getRelTime() - ctx->lastULTime) > (ctx->maxTimeBetweenULSecs*1000));
+            ctx->ulIsCrit |= ((TMMgr_getRelTime() - ctx->lastULTime) > (ctx->maxTimeBetweenULMins*60000));
             if (ctx->ulIsCrit) {
                 return MS_SENDING_UL;
             } else {            
@@ -511,10 +518,10 @@ static SM_STATE_t _mySM[MS_LAST] = {
 void app_core_start() {
     log_debug("AC:init");
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMovingSecs, sizeof(uint32_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_SECS, &_ctx.idleTimeNotMovingSecs, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_MINS, &_ctx.idleTimeNotMovingMins, sizeof(uint32_t));
     memset(&_ctx.modsMask[0], 0xff, MOD_MASK_SZ);       // Default every module is active
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MODS_ACTIVE_MASK, &_ctx.modsMask[0], MOD_MASK_SZ);
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_MAXTIME_UL_SECS, &_ctx.maxTimeBetweenULSecs, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_MAXTIME_UL_MINS, &_ctx.maxTimeBetweenULMins, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_DL_ID, &_ctx.lastDLId, sizeof(uint8_t));
 
     CFMgr_registerCB(configChangedCB);      // For changes to our config
@@ -661,10 +668,16 @@ static void A_setConfig(uint8_t* v, uint8_t l) {
     }
     // value is 2 bytes config id, l-2 bytes value to set
     uint16_t key = readUINT16LE(v, 2);
-    if (CFMgr_setElement(key, v+2, l-2)) {
-        log_info("AC:action SETCONFIG (%d) to %d len value OK", key, l-2);
+    // Check if length is as the config key is already expecting
+    uint8_t exlen = CFMgr_getElementLen(key);
+    if (exlen==(l-2)) {
+        if (CFMgr_setElement(key, v+2, l-2)) {
+            log_info("AC:action SETCONFIG (%d) to %d len value OK", key, l-2);
+        } else {
+            log_warn("AC:action SETCONFIG (%d) to %d len value FAILS", key, l-2);
+        }
     } else {
-        log_warn("AC:action SETCONFIG (%d) to %d len value FAILS", key, l-2);
+        log_warn("AC:action SETCONFIG (%d) to %d len value FAILS as expected len is ", key, (l-2), exlen);
     }
 }
 
