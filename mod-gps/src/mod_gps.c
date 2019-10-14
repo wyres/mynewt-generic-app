@@ -175,7 +175,7 @@ static APP_CORE_API_t _api = {
 static void A_fixgps(uint8_t* v, uint8_t l) {
     log_debug("MG:action FIX GPS DEMANDED");
     _ctx.fixDemanded = true;
-    AppCore_forceUL();
+    AppCore_forceUL(-1);        // just do everyone? or check gps module is enabled?
 }
 
 // Initialise module

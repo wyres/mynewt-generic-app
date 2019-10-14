@@ -52,6 +52,7 @@ static struct appctx {
     uint32_t lastULTime;        // timestamp of last uplink
     uint32_t idleTimeMovingSecs;
     uint32_t idleTimeNotMovingMins;
+    uint32_t idleTimeCheckSecs;
     uint32_t modSetupTimeSecs;
     uint32_t idleStartTS;
     uint32_t maxTimeBetweenULMins;
@@ -66,6 +67,7 @@ static struct appctx {
     .nActions=0,
     .idleTimeMovingSecs=5*60,           // 5mins
     .idleTimeNotMovingMins=120,      // 2 hours
+    .idleTimeCheckSecs=60,   
     .modSetupTimeSecs=3,
     .maxTimeBetweenULMins=120,    // 2 hours
     .lastULTime=0,
@@ -189,14 +191,9 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
                 sm_sendEvent(ctx->mySMId, ME_FORCE_UL, NULL);
                 return SM_STATE_CURRENT;
             }
-            // Start the wakeup timeout 
-            uint32_t idletimeMS = ctx->idleTimeMovingSecs*1000;
-            // check if moved recently and use different timeout
-            if (!MMMgr_hasMovedSince(ctx->lastULTime)) {
-                idletimeMS = ctx->idleTimeNotMovingMins * 60000;
-            }
-            sm_timer_start(ctx->mySMId, idletimeMS);
-            log_debug("AC:idle %d ms", idletimeMS);
+            // Start the wakeup timeout (every 60s we wake to check for movement) 
+            sm_timer_start(ctx->mySMId, ctx->idleTimeCheckSecs*1000);
+            log_debug("AC:idle %d secs", ctx->idleTimeCheckSecs);
             // Record time
             ctx->idleStartTS = TMMgr_getRelTime();
             // activate console on the uart (if configured). 
@@ -233,8 +230,18 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
                 sm_timer_start(ctx->mySMId, ctx->idleTimeMovingSecs*1000);
                 return SM_STATE_CURRENT;
             } 
-            // timeout -> did we move? deal with difference between moving and not moving times TODO
-            return MS_GETTING_SERIAL_MODS;
+            // timeout -> did we move? deal with difference between moving and not moving times
+            uint32_t idletimeMS = ctx->idleTimeNotMovingMins * 60000;
+            // check if has moved recently and use different timeout
+            if (MMMgr_hasMovedSince(ctx->lastULTime)) {
+                idletimeMS = ctx->idleTimeMovingSecs*1000;
+            }
+            if ((TMMgr_getRelTime() - ctx->idleStartTS) > idletimeMS) {
+                return MS_GETTING_SERIAL_MODS;
+            }
+            // else stay here. reset timeout for next check
+            sm_timer_start(ctx->mySMId, ctx->idleTimeCheckSecs*1000);
+            return SM_STATE_CURRENT;
         }
         // you only get Xs to use console then goes to sleep properly
         case ME_CONSOLE_TIMEOUT: {
@@ -251,6 +258,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         case ME_FORCE_UL: {
+            // TODO deal with request to only run 1 module....
             return MS_GETTING_SERIAL_MODS;
         }
         case ME_LORA_RX: {
@@ -519,23 +527,16 @@ void app_core_start() {
     log_debug("AC:init");
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMovingSecs, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_MINS, &_ctx.idleTimeNotMovingMins, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_CHECK_SECS, &_ctx.idleTimeCheckSecs, sizeof(uint32_t));
     memset(&_ctx.modsMask[0], 0xff, MOD_MASK_SZ);       // Default every module is active
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MODS_ACTIVE_MASK, &_ctx.modsMask[0], MOD_MASK_SZ);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MAXTIME_UL_MINS, &_ctx.maxTimeBetweenULMins, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_DL_ID, &_ctx.lastDLId, sizeof(uint8_t));
-
     CFMgr_registerCB(configChangedCB);      // For changes to our config
 
     registerActions();
 
-    // Can set config before init, then it all gets set once init done
-    lora_app_setAck(true);      // we like acks in this test program
-    lora_app_setAdr(false);      // but not adr coz we're mobile
-    lora_app_setTxPort(LORAWAN_UL_PORT);      
-    lora_app_setRxPort(LORAWAN_DL_PORT);      
-    lora_app_setTxPower(14);      // go max
-    lora_app_setDR(2);          // go SF10
-    // deveui etc are in PROM
+    // deveui, and other lora setup config are in PROM
     lora_app_init(lora_tx_cb, lora_rx_cb);
 
     // initialise console for use during idle periods if enabled
@@ -615,8 +616,15 @@ uint32_t AppCore_lastULTime() {
 uint32_t AppCore_getTimeToNextUL() {
     return TMMgr_getRelTime() - _ctx.idleStartTS;
 }
-bool AppCore_forceUL() {
-    return sm_sendEvent(_ctx.mySMId, ME_FORCE_UL, NULL);
+// Request stop idle and goto UL phase now
+// optionally request 'fast' UL ie just 1 module to let do data collection
+// TODO (required for fast button UL sending)
+bool AppCore_forceUL(int reqModule) {
+    void* ed = NULL;
+    if (reqModule>=0 && reqModule<APP_MOD_LAST) {
+        ed = (void*)(1000+reqModule); // add 1000 as if 0 then same as NULL....
+    }
+    return sm_sendEvent(_ctx.mySMId, ME_FORCE_UL, ed);
 }
 
 // Tell core we're done processing

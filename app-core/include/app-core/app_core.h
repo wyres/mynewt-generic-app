@@ -51,8 +51,8 @@ void AppCore_setModuleState(APP_MOD_ID_t mid, bool active);
 uint32_t AppCore_lastULTime();
 // Time in ms to next UL in theory
 uint32_t AppCore_getTimeToNextUL();
-// Go for UL preparation NOW
-bool AppCore_forceUL();
+// Go for UL preparation NOW - optionally with only requested module being run. If -1 then normal data collection.
+bool AppCore_forceUL(int reqModule);
 // Tell core we're done processing
 void AppCore_module_done(APP_MOD_ID_t id);
 // Register a DL action handler
@@ -84,6 +84,7 @@ typedef enum { APP_CORE_DL_REBOOT=1, APP_CORE_DL_SET_CONFIG=2, APP_CORE_DL_GET_C
 #define CFG_UTIL_KEY_MODS_ACTIVE_MASK           CFGKEY(CFG_MODULE_APP_CORE, 4)
 #define CFG_UTIL_KEY_MAXTIME_UL_MINS            CFGKEY(CFG_MODULE_APP_CORE, 5)
 #define CFG_UTIL_KEY_DL_ID                      CFGKEY(CFG_MODULE_APP_CORE, 6)
+#define CFG_UTIL_KEY_IDLE_TIME_CHECK_SECS       CFGKEY(CFG_MODULE_APP_CORE, 7)
 
 // Configuration keys used by modules - add to end of list as required. Never alter already assigned values.
 #define CFG_UTIL_KEY_BLE_SCAN_TIME_MS          CFGKEY(CFG_MODULE_APP_MOD, 1)

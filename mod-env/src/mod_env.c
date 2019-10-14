@@ -34,7 +34,7 @@ static struct appctx {
 } _ctx = {
     .sentRebootInfo=NB_REBOOT_INFOS,
 };
-static void buttonChangeCB();
+static void buttonChangeCB(void* ctx, SR_BUTTON_STATE_t currentState, SR_BUTTON_PRESS_TYPE_t currentPressType);
 
 // My api functions
 static uint32_t start() {
@@ -186,22 +186,21 @@ void mod_env_init(void) {
     // hook app-core for env data
     AppCore_registerModule(APP_MOD_ENV, &_api, EXEC_PARALLEL);
 
-    // add cb for button press
-    SRMgr_registerButtonCB(buttonChangeCB);
+    // add cb for button press, no context required
+    SRMgr_registerButtonCB(buttonChangeCB, NULL);
 //    log_debug("mod-env initialised");
 }
 
 // internals
 // callback each time button changes state
-static void buttonChangeCB() {
-    uint8_t bs = SRMgr_getButton();
-    if (bs==SR_BUTTON_RELEASED) {
+static void buttonChangeCB(void* ctx, SR_BUTTON_STATE_t currentState, SR_BUTTON_PRESS_TYPE_t currentPressType) {
+    if (currentState==SR_BUTTON_RELEASED) {
         // note using log_noout as button shares GPIO with debug log uart...
         log_noout("ME:button released, duration %d ms, press type:%d", 
             (SRMgr_getLastButtonReleaseTS()-SRMgr_getLastButtonPressTS()),
             SRMgr_getLastButtonPressType());
-        // ask for immediate UL
-        AppCore_forceUL();
+        // ask for immediate UL with only us consulted
+        AppCore_forceUL(APP_MOD_ENV);
     } else {
         log_noout("ME:button pressed");
     }

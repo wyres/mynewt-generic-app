@@ -205,7 +205,7 @@ static ATRESULT atcmd_setmod(uint8_t nargs, char* argv[]) {
 static ATRESULT atcmd_runcycle(uint8_t nargs, char* argv[]) {
     wconsole_println("AppCore: Exit console, run data collection...");
     stopConsole();
-    AppCore_forceUL();
+    AppCore_forceUL(-1);
     return ATCMD_OK;
 }
 
