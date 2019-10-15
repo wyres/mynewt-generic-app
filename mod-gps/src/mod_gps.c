@@ -181,7 +181,7 @@ static void A_fixgps(uint8_t* v, uint8_t l) {
 // Initialise module
 void mod_gps_init(void) {
     // initialise access to GPS
-    gps_mgr_init(MYNEWT_VAL(GPS_UART), MYNEWT_VAL(GPS_PWRIO), MYNEWT_VAL(GPS_UART_SELECT));
+    gps_mgr_init(MYNEWT_VAL(MOD_GPS_UART), MYNEWT_VAL(MOD_GPS_UART_BAUDRATE), MYNEWT_VAL(MOD_GPS_PWRIO), MYNEWT_VAL(MOD_GPS_UART_SELECT));
     // hook app-core for gps operation
     AppCore_registerModule(APP_MOD_GPS, &_api, EXEC_SERIAL);
     // Register for the gps action(s)

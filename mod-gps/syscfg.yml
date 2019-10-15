@@ -10,6 +10,6 @@ syscfg.defs:
         value: 9600
     MOD_GPS_UART_SELECT:
         description: "code for uart switcher for GPS module: extio=1, spkr=0 (BUT SPKR VALUE IS INVERTED)"
-        value: 3
+        value: UART_SELECT_DD       #3
 
 syscfg.vals:

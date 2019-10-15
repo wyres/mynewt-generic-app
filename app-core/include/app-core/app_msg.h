@@ -25,6 +25,8 @@ extern "C" {
 #define APP_CORE_DL_MAX_SZ (250)    // as we don't control it
 #define LORAWAN_UL_PORT 3
 #define LORAWAN_DL_PORT 3
+#define APP_CORE_MSGS_VERSION_UL (1)
+#define APP_CORE_MSGS_VERSION_DL (0)
 
 // 1st 2 bytes are header, then TLV blocks (1 byte T, 1byte L, n bytes V)
 // byte 0 : b0-3 : lastDLId, b4-5 : protocol version, b6 : config stock, b7 : even parity bit

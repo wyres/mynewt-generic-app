@@ -16,7 +16,6 @@
 #include "bsp.h"
 
 #include "wyres-generic/wutils.h"
-#include "wyres-generic/L96I2Ccomm.h"
 #include "wyres-generic/uartlinemgr.h"
 #include "wyres-generic/timemgr.h"
 #include "wyres-generic/rebootmgr.h"
@@ -27,9 +26,8 @@
  */
 void app_core_init(void) {
     bool res = true;
-    // initialise devices
-//  L96_I2C_comm_create("L96_0", "I2C0", MYNEWT_VAL(L96_0_I2C_ADDR), MYNEWT_VAL(L96_0_PWRIO));
-    res=uart_line_comm_create(UART0_DEV, MYNEWT_VAL(GPS_UART_BAUDRATE));
+    // initialise devices that are common
+    res=uart_line_comm_create(UART0_DEV, 19200);        // specific users of the uart will change the baud rate as required
     assert(res);
 
     log_warn("app init - reset %04x, last assert at [0x%08x]", 

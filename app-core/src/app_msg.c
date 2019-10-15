@@ -85,7 +85,7 @@ uint8_t app_core_msg_ul_finalise(APP_CORE_UL_t* ul, uint8_t lastDLId, bool willL
         //	1 : length of following TLV block
         //	- allows backend to reliably (mostly) detect this type of message - if 1st byte parity=0 and 2nd byte value+2=message length then its probably this format....
         //	- 00 00 is the most basic valid message
-        ul->msgs[ul->msbNbTxing].payload[0] = (lastDLId & 0x0f) | 0x00 | (willListen?0x40:0x00);
+        ul->msgs[ul->msbNbTxing].payload[0] = (lastDLId & 0x0f) | ((APP_CORE_MSGS_VERSION_UL & 0x03)<<4) | (willListen?0x40:0x00);
         if (!evenParity(ul->msgs[ul->msbNbTxing].payload[0])) {
             ul->msgs[ul->msbNbTxing].payload[0] |= 0x80;        // not even, add parity bit
         }
@@ -108,7 +108,7 @@ bool app_core_msg_dl_decode(APP_CORE_DL_t* msg) {
     }
     // Check protocol version
     uint8_t pver = ((msg->payload[0] >> 4) & 0x03);
-    if (pver==0) {
+    if (pver==APP_CORE_MSGS_VERSION_DL) {
         // dlid in [1] in top 4 bits, nb actions in bottom 4
         msg->dlId = ((msg->payload[1] >> 4) & 0x0f);
         msg->nbActions = (msg->payload[1] & 0x0f);
