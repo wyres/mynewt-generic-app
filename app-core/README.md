@@ -44,3 +44,30 @@ each module requires is returned from its start() method, although a module can 
 A module may also register a 'tic' hook ie a function which is called during these regular wakeups to perform an action.
 During the first 10s of the idle phase, if configured, the console is active for AT commands. The rest of the time it is inactive to achieve the lowest current consumation.
 
+AT Command console
+-------------------
+The AppCore console is activated for all build profiles for 30s post-boot on the standard UART interface. If no 'AT' command
+is received during this time, it transitions to the usual operation. If an AT command is received, the code stays permanently in the console, and the user must explicitly exit either via a reboot (ATZ) or a run (AT+RUN).
+
+Useful AT commands:
+AT - wake the console
+AT+HELP - list the available commands
+ATZ - reboot
+AT+RUN - execute the data collection loop
+AT+INFO - some basic card info
+AT+GETCFG <config group> - show config keys for this group
+AT+SETCFG <4 digit key> <value> - set a config value
+AT+GETMODS/AT+SETMODS - see/change the set of activated modules. See app_core.h for the module ids.
+
+The console is also active for 10s at the start of each idle period (signalled by 1Hz flash of both leds)
+
+AppCore module config keys
+---------------------------
+See app_core.h for the list. Some key ones:
+0401/0402 : idle time when moving / not moving
+0407 : idle period check time (60s default)
+
+DL Action handling
+------------------
+App-core handles the reception and decoding of the DL packets. These consist of a set of 'actions', each with a 1 byte key (defined in app_core.h). Modules can register to execute specific action keys at startup - only 1 module can register for each key and the system will assert() if more than one tries.
+Most of the core actions are handled by the app_core.c file, including reset, get/setcfg and setting UTCTime.

@@ -113,6 +113,7 @@ static APP_CORE_API_t _api = {
     .sleepCB = &sleep,
     .deepsleepCB = &deepsleep,
     .getULDataCB = &getData,    
+    .ticCB = NULL,    
 };
 // Initialise module
 void mod_ble_scan_nav_init(void) {

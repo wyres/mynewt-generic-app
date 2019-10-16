@@ -241,6 +241,16 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             }
             // else stay here. reset timeout for next check
             sm_timer_start(ctx->mySMId, ctx->idleTimeCheckSecs*1000);
+            // Call any module's tic cbs
+            for(int i=0;i<ctx->nMods;i++) {
+                if (isModActive(ctx->modsMask, ctx->mods[i].id)) {
+                    // Call if defined
+                    if (ctx->mods[i].api->ticCB!=NULL) {
+                        (*(ctx->mods[i].api->ticCB))();
+                    }
+                }
+            }
+
             return SM_STATE_CURRENT;
         }
         // you only get Xs to use console then goes to sleep properly
@@ -554,14 +564,17 @@ void app_core_start() {
 void AppCore_registerModule(APP_MOD_ID_t id, APP_CORE_API_t* mcbs, APP_MOD_EXEC_t execType) {
     assert(id < APP_MOD_LAST);
     assert(_ctx.nMods<MAX_MODS);
-
+    assert(mcbs!=NULL);
+    assert(mcbs->startCB != NULL);
+    assert(mcbs->stopCB != NULL);
+    assert(mcbs->getULDataCB != NULL);
+    
     _ctx.mods[_ctx.nMods].api = mcbs;
     _ctx.mods[_ctx.nMods].id = id;
     _ctx.mods[_ctx.nMods].exec = execType;
     _ctx.nMods++;
     log_debug("AC: add [%d] exec[%d]", id, execType);
 }
-
 
 // is module active?
 bool AppCore_getModuleState(APP_MOD_ID_t mid) {

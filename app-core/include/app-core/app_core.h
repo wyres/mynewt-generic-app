@@ -29,12 +29,14 @@ typedef void (*APP_MOD_STOP_FN_t)();
 typedef void (*APP_MOD_SLEEP_FN_t)();
 typedef void (*APP_MOD_DEEPSLEEP_FN_t)();
 typedef bool (*APP_MOD_GETULDATA_FN_t)(APP_CORE_UL_t* ul);      // returns true if UL is 'critical',  false if not
+typedef void (*APP_MOD_TIC_FN_t)();            // Callback for the tic registration 
 typedef struct {
     APP_MOD_START_FN_t startCB;
     APP_MOD_STOP_FN_t stopCB;
-    APP_MOD_SLEEP_FN_t sleepCB;
-    APP_MOD_DEEPSLEEP_FN_t deepsleepCB;
+    APP_MOD_SLEEP_FN_t sleepCB;             // may be null if has no sleeping actions to do
+    APP_MOD_DEEPSLEEP_FN_t deepsleepCB;     // may be null if has no sleeping actions to do
     APP_MOD_GETULDATA_FN_t getULDataCB;
+    APP_MOD_TIC_FN_t ticCB;                 // may be NULL if no ops to do
 } APP_CORE_API_t;
 
 // Add module ids here (before the APP_MOD_LAST enum)

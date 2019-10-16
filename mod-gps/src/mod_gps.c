@@ -168,7 +168,8 @@ static APP_CORE_API_t _api = {
     .stopCB = &stop,
     .sleepCB = &sleep,
     .deepsleepCB = &deepsleep,
-    .getULDataCB = &getData,    
+    .getULDataCB = &getData,
+    .ticCB = NULL,
 };
 
 // DL action to request GPS FIX

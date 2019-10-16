@@ -179,7 +179,8 @@ static APP_CORE_API_t _api = {
     .stopCB = &stop,
     .sleepCB = &sleep,
     .deepsleepCB = &deepsleep,
-    .getULDataCB = &getData,    
+    .getULDataCB = &getData,
+    .ticCB = NULL,    
 };
 // Initialise module
 void mod_env_init(void) {

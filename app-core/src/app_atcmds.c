@@ -151,14 +151,35 @@ static ATRESULT atcmd_setcfg(uint8_t nargs, char* argv[]) {
                     }
                 }
                 CFMgr_setElement(k, &v, l);
-                wconsole_println("Key[%04x]=%d",k,v);
+                printKey(k);        // Show the value now in the config 
+//                wconsole_println("Key[%04x]=%d",k,v);
                 break;
             }
 
             default: {
                 // parse as hex string
-                // TODO
-                wconsole_println("Key[%04x]=%s TODO", k, argv[2]);
+                char* vp = argv[2];
+                // Skip 0x if user put it in
+                if (*vp=='0' && *(vp+1)=='x') {
+                    vp+=2;
+                }
+                //Check got enough digits
+                if (strlen(vp)!=(l*2)) {
+                    wconsole_println("Key[%04x]=%s incorrect length should be %d bytes", k, argv[2], l);
+                    return ATCMD_BADARG;
+                }
+                if (l>16) {
+                    wconsole_println("Key[%04x] has length %d but cannot set here (max 16)", k, l);
+                    return ATCMD_BADARG;
+                }
+                // gonna allow up to 16 bytes
+                uint8_t val[16];
+                for(int i=0;i<l;i++) {
+                    sscanf(vp, "%02x", (unsigned int*)(&val[i]));
+                    vp+=2;
+                }
+                CFMgr_setElement(k, &val[0], l);
+                printKey(k);
                 break;
             }
         }
