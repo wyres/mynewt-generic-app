@@ -56,22 +56,56 @@ The AppCore console is activated for all build profiles for 30s post-boot on the
 is received during this time, it transitions to the usual operation. If an AT command is received, the code stays permanently in the console, and the user must explicitly exit either via a reboot (ATZ) or a run (AT+RUN).
 
 Useful AT commands:
-AT - wake the console
-AT+HELP - list the available commands
-ATZ - reboot
-AT+RUN - execute the data collection loop
-AT+INFO - some basic card info
-AT+GETCFG <config group> - show config keys for this group
-AT+SETCFG <4 digit key> <value> - set a config value
-AT+GETMODS/AT+SETMODS - see/change the set of activated modules. See app_core.h for the module ids.
+- AT - wake the console
+- AT+HELP - list the available commands
+- ATZ - reboot
+- AT+RUN - execute the data collection loop
+- AT+INFO - some basic card info
+- AT+GETCFG <config group> - show config keys for this group
+- AT+SETCFG <4 digit key> <value> - set a config value
+- AT+GETMODS/AT+SETMODS - see/change the set of activated modules. See app_core.h for the module ids.
 
 The console is also active for 10s at the start of each idle period (signalled by 1Hz flash of both leds)
 
 AppCore module config keys
 ---------------------------
 See app_core.h for the list. Some key ones:
-0401/0402 : idle time when moving (in seconds) / not moving (in minutes)
-0407 : idle period check time (in seconds, 60s default)
+| module | config identifier | length |  description | 
+| --------: | :--------: | :--------:  | :--------: |
+| UTIL | 0001 | 8 | Reboot reason |
+| UTIL | 0002 | 64 | store fn tracker buffer in case of reboot |
+| UTIL | 0003 | 4 | Assert caller |
+| LORA | 0101 | - | Dev EUI |
+| LORA | 0102 | - | App EUI |
+| LORA | 0103 | - | App KEY |
+| LORA | 0104 | - | Dev ADDR |
+| LORA | 0105 | - | Network session key |
+| LORA | 0106 | - | App session key |
+| LORA | 0107 | - | ADR enabled |
+| LORA | 0108 | - | Acknoledgement |
+| LORA | 0109 | - | data rate |
+| LORA | 0110 | - | tx power |
+| LORA | 0111 | - | port for TX |
+| LORA | 0112 | - | port for RX |
+| APP | 0201 | - | CFG_UTIL_KEY_CHECKINTERVAL repos\generic\generic\include\wyres-generic\appConfigKeys.h  used ? |
+| WYRES | 0301 | - | CFG_WYRES_KEY_TAG_SYNC_DM_INTERVAL  used ? |
+| WYRES | 0302 | - | CFG_WYRES_KEY_LORA_TXPOWER  used ? |
+| WYRES | 0303 | - | CFG_WYRES_KEY_BLE_SCANWINDOW  used ? |
+| WYRES | 0304 | - | CFG_WYRES_KEY_TAG_NONSYNC_DM_INTERVAL  used ? |
+| WYRES | 0305 | - | CFG_WYRES_KEY_FOTA_VER  used ? |
+| APP_CORE | 0401 | - | idle time when moving (in seconds) |
+| APP_CORE | 0402 | - | idle time not moving (in minutes) |
+| APP_CORE | 0403 | - | MODSETUP_TIME_SECS |
+| APP_CORE | 0404 | - | MODS_ACTIVE_MASK |
+| APP_CORE | 0405 | - | Maximal time between uplink in minutes |
+| APP_CORE | 0406 | - | Downlink id (dlid) |
+| APP_CORE | 0407 | - | idle period check time (in seconds, 60s default) |
+| APP_MOD | 0501 | - | BLE scan duration un ms |
+| APP_MOD | 0502 | - | GPS cold time in seconds |
+| APP_MOD | 0503 | - | GPS warm time in seconds |
+| APP_MOD | 0504 | - | GPS power mode |
+| APP_MOD | 0505 | - | GPS fix mode |
+
 
 DL Action handling
 ------------------
