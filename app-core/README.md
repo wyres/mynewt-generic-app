@@ -70,6 +70,7 @@ The console is also active for 10s at the start of each idle period (signalled b
 AppCore module config keys
 ---------------------------
 See app_core.h for the list. Some key ones:
+
 | module | config identifier | length |  description | 
 | --------: | :--------: | :--------:  | :--------: |
 | UTIL | 0001 | 8 | Reboot reason |
