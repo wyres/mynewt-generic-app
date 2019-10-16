@@ -44,6 +44,12 @@ each module requires is returned from its start() method, although a module can 
 A module may also register a 'tic' hook ie a function which is called during these regular wakeups to perform an action.
 During the first 10s of the idle phase, if configured, the console is active for AT commands. The rest of the time it is inactive to achieve the lowest current consumation.
 
+LoRa Operation
+--------------
+The KLK wrapper round the stackforce stack is re-wrapped by the loraapp.c code in generic. Note that this auto-joins if not already joined on the first UL.
+
+An UL is not neccessarily sent every data collection loop - each module indicates if it has 'critical' data in its collection, and if no module is critical then no UL is sent. The config key MAXTIME_UL_MIN (0405) sets the maximum time that can elapse without an uplink (default 120 minutes) after which the UL data is sent anyway.
+
 AT Command console
 -------------------
 The AppCore console is activated for all build profiles for 30s post-boot on the standard UART interface. If no 'AT' command
@@ -64,8 +70,8 @@ The console is also active for 10s at the start of each idle period (signalled b
 AppCore module config keys
 ---------------------------
 See app_core.h for the list. Some key ones:
-0401/0402 : idle time when moving / not moving
-0407 : idle period check time (60s default)
+0401/0402 : idle time when moving (in seconds) / not moving (in minutes)
+0407 : idle period check time (in seconds, 60s default)
 
 DL Action handling
 ------------------

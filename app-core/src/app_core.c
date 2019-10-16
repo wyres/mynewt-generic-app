@@ -236,11 +236,14 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             if (MMMgr_hasMovedSince(ctx->lastULTime)) {
                 idletimeMS = ctx->idleTimeMovingSecs*1000;
             }
-            if ((TMMgr_getRelTime() - ctx->idleStartTS) > idletimeMS) {
+            idletimeMS -= 1000;     // adjust by 1s to get run if 'close' to timeout
+            uint32_t dt = TMMgr_getRelTime() - ctx->idleStartTS;
+            if (dt >= idletimeMS) {
                 return MS_GETTING_SERIAL_MODS;
             }
             // else stay here. reset timeout for next check
             sm_timer_start(ctx->mySMId, ctx->idleTimeCheckSecs*1000);
+            log_debug("AC:reidle %d secs as been idle for %d not more than the limit %d", ctx->idleTimeCheckSecs, dt, idletimeMS);
             // Call any module's tic cbs
             for(int i=0;i<ctx->nMods;i++) {
                 if (isModActive(ctx->modsMask, ctx->mods[i].id)) {
@@ -250,6 +253,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
                     }
                 }
             }
+            log_debug("called tics");
 
             return SM_STATE_CURRENT;
         }
