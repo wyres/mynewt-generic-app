@@ -28,13 +28,17 @@ It has the 'app-core' control, and 1 or more 'mod-X' packages which define indep
 which will be called at the appropriate points to collect their data ready for UL.
 
 The 'app-core' package governs the central execution, with 5 specific phases:
-- phase 1 : init and startup
+- phase 1a : init and startup
 This initialisation phase, using the mynewt sysinit mechanisme, to allow the 'modules' to be initialised
 based on their pkg.yml sysinit values, and to register with the app-core system as both modules to be
 executed and as the destination of DL actions. Registeration of a module essentially consists of it indicating the set of 
 functions that implement the API required.
 Once sysinit has finished, app-core state machine enters the 'startup' state, which activates the console for a 
-specific period of time for config AT commands. Once expired, the SM goes to the 1st collection cycle state.
+specific period of time for config AT commands. Once expired, the SM goes to the JOIN attempt phase.
+- phase 1b: JOIN attempt / retries.
+The appcore asks the lorawan api to JOIN the network. If the join attempt fails, then either the code goes into STOCK mode (if it has NEVER joined) , or into a sleep for X minutes before retrying the JOIN. If the JOIN is sucessful then stock mode is disabled, and transition to the 1st collection cycle state 2a.
+- phase 1c : STOCK mode
+This consists of deep sleep until manually reset and is intended for devices held in stock.
 - phase 2a : data collection from modules that must be executed in 'serial' mode ie when no other module is also executing.
 This lets a module be sure its use of hardware specific elements is not in competition with other modules. The execution time 
 each module requires is returned from its start() method, although a module can indicate an earlier termination at any time.
@@ -46,7 +50,12 @@ During the first 10s of the idle phase, if configured, the console is active for
 
 LoRa Operation
 --------------
-The KLK wrapper round the stackforce stack is re-wrapped by the loraapp.c code in generic. Note that this auto-joins if not already joined on the first UL.
+The Lorawan api used is defined in the generic/loraapi_XXX packages. The same lorapi.h API is used no matter which stack underneath.
+generic/loraapi_KLK:
+This package uses the KLK wrapper round the stackforce stack. 
+The JOIN phase is explicity handled by the appcore statemachine. Note that the KLK wrapper auto-joins on 1st UL, the lorawan api forces this to happen when join is requested by sending an initial UL packet with the current uptime.
+generic/loraapi_SKF:
+This package wraps directly onto the stackforce API. Note : not yet complete.
 
 An UL is not neccessarily sent every data collection loop - each module indicates if it has 'critical' data in its collection, and if no module is critical then no UL is sent. The config key MAXTIME_UL_MIN (0405) sets the maximum time that can elapse without an uplink (default 120 minutes) after which the UL data is sent anyway.
 
@@ -65,13 +74,12 @@ AT+GETCFG <config group> - show config keys for this group
 AT+SETCFG <4 digit key> <value> - set a config value
 AT+GETMODS/AT+SETMODS - see/change the set of activated modules. See app_core.h for the module ids.
 
-The console is also active for 10s at the start of each idle period (signalled by 1Hz flash of both leds)
-
 AppCore module config keys
 ---------------------------
 See app_core.h for the list. Some key ones:
 0401/0402 : idle time when moving (in seconds) / not moving (in minutes)
 0407 : idle period check time (in seconds, 60s default)
+0408 : stock mode : 0 = goto stock mode if JOIN fails, 1=retry if JOIN fails
 
 DL Action handling
 ------------------

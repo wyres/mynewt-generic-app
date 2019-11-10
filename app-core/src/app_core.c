@@ -21,10 +21,10 @@
 #include "wyres-generic/movementmgr.h"
 #include "wyres-generic/sm_exec.h"
 #include "wyres-generic/lowpowermgr.h"
-#include "wyres-generic/loraapp.h"
+//#include "wyres-generic/loraapp.h"
 #include "wyres-generic/timemgr.h"
 #include "wyres-generic/rebootmgr.h"
-
+#include "loraapi/loraapi.h"
 #include "app-core/app_console.h"
 #include "app-core/app_core.h"
 #include "app-core/app_msg.h"
@@ -33,7 +33,9 @@
 #define MAX_MODS    MYNEWT_VAL(APP_CORE_MAX_MODS)
 // Size of bit mask in bytes to contain all known modules
 #define MOD_MASK_SZ ((APP_MOD_LAST/8)+1)
-
+// The timeout before leaving UL sending state. Should be big enough to allow any DL to have arrived 
+#define UL_WAIT_DL_TIMEOUTMS (20000)       
+ 
 // State machine for core app
 // COntext data
 static struct appctx {
@@ -55,12 +57,28 @@ static struct appctx {
     uint32_t idleTimeCheckSecs;
     uint32_t modSetupTimeSecs;
     uint32_t idleStartTS;
+    uint32_t joinStartTS;
     uint32_t maxTimeBetweenULMins;
     bool doReboot;
+    uint8_t stockMode;
+    uint32_t joinTimeCheckSecs;
+    uint32_t rejoinWaitMins;
     uint8_t nActions;
     ACTION_t actions[MAX_DL_ACTIONS];
     // ul response id : holds the last DL id we received. Sent in each UL to inform backend we got its DLs. 0=not listening
     uint8_t lastDLId;
+    struct loraapp_config {
+        bool useAck;
+        bool useAdr;
+        uint8_t txPort;
+        uint8_t rxPort;
+        uint8_t loraSF;
+        int8_t txPower;
+        uint32_t txTimeoutMs;
+        uint8_t deveui[8];
+        uint8_t appeui[8];
+        uint8_t appkey[16];
+    } loraCfg;
 } _ctx = {
     .doReboot=false,
     .nMods=0,
@@ -68,11 +86,31 @@ static struct appctx {
     .idleTimeMovingSecs=5*60,           // 5mins
     .idleTimeNotMovingMins=120,      // 2 hours
     .idleTimeCheckSecs=60,   
+    .joinTimeCheckSecs=60,          // timeout on join attempt   
+    .rejoinWaitMins=120,           // 2 hours for rejoin tries  
+    .stockMode=0,                   // in stock mode by default until a rejoin works 
     .modSetupTimeSecs=3,
     .maxTimeBetweenULMins=120,    // 2 hours
     .lastULTime=0,
     .lastDLId=0,            // default when new, will be read from the config mgr
+    .loraCfg = {
+        .useAck = false,
+        .useAdr = false,
+        .txPort=3,
+        .rxPort=3,
+        .loraSF=LORAWAN_SF10,      
+        .txPower=14,
+       .txTimeoutMs=10000,
+//    .deveui = {0x38,0xE8,0xEB,0xE0, 0x00, 0x00, 0x0d, 0x78},
+       .deveui = {0x38,0xb8,0xeb,0xe0, 0x00, 0x00, 0xFF, 0xFF},
+//    .appeui = {0x01,0x23,0x45,0x67, 0x89, 0xab, 0xcd, 0xef},
+//    .appeui = {0x38,0xE8,0xEB,0xEA, 0xBC, 0xDE, 0xF0, 0x42},
+      .appeui = {0x38,0xE8,0xEB,0xE0, 0x00, 0x00, 0x00, 0x00},
+      .appkey = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF},
+    },
 };
+
+typedef enum { LORA_TX_OK, LORA_TX_OK_ACKD, LORA_TX_ERR_RETRY, LORA_TX_ERR_FATAL, LORA_TX_ERR_NOTJOIN, LORA_TX_NO_TX } LORA_TX_RESULT_t;
 
 // predeclarations
 static void registerActions();
@@ -86,6 +124,8 @@ static void configChangedCB(uint16_t key) {
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_MINS, &_ctx.idleTimeNotMovingMins, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MODSETUP_TIME_SECS, &_ctx.modSetupTimeSecs, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MAXTIME_UL_MINS, &_ctx.maxTimeBetweenULMins, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_JOIN_TIMEOUT_SECS, &_ctx.joinTimeCheckSecs, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_RETRY_JOIN_TIME_SECS, &_ctx.rejoinWaitMins, sizeof(uint32_t));
 
 }
 static bool isModActive(uint8_t* mask, APP_MOD_ID_t id) {
@@ -96,36 +136,64 @@ static bool isModActive(uint8_t* mask, APP_MOD_ID_t id) {
 }
 // application core state machine
 // Define my state ids
-enum MyStates { MS_STARTUP, MS_IDLE, MS_GETTING_SERIAL_MODS, MS_GETTING_PARALLEL_MODS, MS_SENDING_UL, MS_LAST };
-enum MyEvents { ME_MODS_OK, ME_MODULE_DONE, ME_FORCE_UL, ME_LORA_RESULT, ME_LORA_RX, ME_CONSOLE_TIMEOUT };
+enum MyStates { MS_STARTUP, MS_STOCK, MS_TRY_JOIN, MS_WAIT_JOIN_RETRY, MS_IDLE, MS_GETTING_SERIAL_MODS, MS_GETTING_PARALLEL_MODS, MS_SENDING_UL, MS_LAST };
+enum MyEvents { ME_MODS_OK, ME_MODULE_DONE, ME_FORCE_UL, ME_LORA_JOIN_OK, ME_LORA_JOIN_FAIL, ME_LORA_RESULT, ME_LORA_RX, ME_CONSOLE_TIMEOUT };
 // related fns
 
-static void lora_tx_cb(LORA_TX_RESULT_t res) {
+static void lora_join_cb(void* userctx, LORAWAN_RESULT_t res) {
 //    log_debug("lora tx cb : result:%d", res);
+    if (res==LORAWAN_RES_JOIN_OK) {
+        sm_sendEvent(_ctx.mySMId, ME_LORA_JOIN_OK, (void*)res);
+    } else {
+        sm_sendEvent(_ctx.mySMId, ME_LORA_JOIN_FAIL, (void*)res);
+    }
+    
+}
+static void lora_tx_cb(void* userctx, LORAWAN_RESULT_t res) {
+//    log_debug("lora tx cb : result:%d", res);
+    // Map lorawan api result codes to our list
+    LORA_TX_RESULT_t ourres = LORA_TX_ERR_FATAL;
+    switch(res) {
+        case LORAWAN_RES_OK:
+            ourres = LORA_TX_OK;
+            break;
+        case LORAWAN_RES_NOT_JOIN:
+            ourres = LORA_TX_ERR_NOTJOIN;
+            break;
+        case LORAWAN_RES_DUTYCYCLE:
+        case LORAWAN_RES_OCC:
+        case LORAWAN_RES_NO_BW:
+            ourres = LORA_TX_ERR_RETRY;
+            break;
+        default:
+            ourres = LORA_TX_ERR_FATAL;
+            break;
+    }
     // pass tx result directly as value as var 'res' may not be around when SM is run....
-    sm_sendEvent(_ctx.mySMId, ME_LORA_RESULT, (void*)res);
+    sm_sendEvent(_ctx.mySMId, ME_LORA_RESULT, (void*)ourres);
 }
 
-static void lora_rx_cb(uint8_t port, void* data, uint8_t sz) {
+static void lora_rx_cb(void* userctx, LORAWAN_RESULT_t res, uint8_t port, int rssi, int snr, uint8_t* msg, uint8_t sz) {
     // Copy data into static message buffer in ctx as sendEvent is executed off this thread -> can't use stack var.
     if (sz>APP_CORE_DL_MAX_SZ) {
         // oops
         log_debug("AC:lora rx toobig sz %d", sz);
         return;
     }
-    memcpy(&_ctx.rxmsg.payload[0], data, sz);
+    memcpy(&_ctx.rxmsg.payload[0], msg, sz);
     _ctx.rxmsg.sz = sz;
     // Decode it
     if (app_core_msg_dl_decode(&_ctx.rxmsg)) {
         log_debug("AC:lora rx dlid %d, na %d", _ctx.rxmsg.dlId, _ctx.rxmsg.nbActions);
         sm_sendEvent(_ctx.mySMId, ME_LORA_RX, (void*)(&_ctx.rxmsg));
     } else {
-        log_debug("AC:lora rx BAD sz %d b0/1 %02x:%02x", sz, ((uint8_t*)data)[0], ((uint8_t*)data)[1]);
+        log_debug("AC:lora rx BAD sz %d b0/1 %02x:%02x", sz, ((uint8_t*)msg)[0], ((uint8_t*)msg)[1]);
     }
 }
 // SM state functions
 
 // state for startup init, AT command line, etc before becoming idle
+// Only for initial startup after boot and never again
 static SM_STATE_ID_t State_Startup(void* arg, int e, void* data) {
     struct appctx* ctx = (struct appctx*)arg;
     switch(e) {
@@ -157,11 +225,11 @@ static SM_STATE_ID_t State_Startup(void* arg, int e, void* data) {
                 log_debug("AC : console active stays in startup mode");
                 return SM_STATE_CURRENT;
             } 
-            // Starts by running the aquisitiion
-            return MS_GETTING_SERIAL_MODS;
+            // Starts by joining
+            return MS_TRY_JOIN;
         }
         case ME_FORCE_UL: {
-            return MS_GETTING_SERIAL_MODS;
+            return MS_TRY_JOIN;
         }
 
         default: {
@@ -171,6 +239,150 @@ static SM_STATE_ID_t State_Startup(void* arg, int e, void* data) {
     }
     assert(0);      // shouldn't get here
 }
+// After startup (power on) we try for a join
+static SM_STATE_ID_t State_TryJoin(void* arg, int e, void* data) {
+    struct appctx* ctx = (struct appctx*)arg;
+    switch(e) {
+        case SM_ENTER: {
+            if (ctx->doReboot) {
+                log_debug("AC:enter try join and reboot pending... bye bye....");
+                RMMgr_reboot(RM_DM_ACTION);
+                // Fall out just in case didn't actually reboot...
+                log_error("AC: should have rebooted!");
+                assert(0);
+            }
+            // Start the join timeout (shouldnt need it...) 
+            sm_timer_start(ctx->mySMId, ctx->joinTimeCheckSecs*1000);
+            log_debug("AC:try join : timeout in %d secs", ctx->joinTimeCheckSecs);
+            // Record time
+            ctx->joinStartTS = TMMgr_getRelTime();
+            // Stop all leds, and flash fast both to show we're trying join
+            ledStart(MYNEWT_VAL(MODS_ACTIVE_LED), FLASH_5HZ, -1);
+            ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_5HZ, -1);
+            // Set desired low power mode to be just sleep as console is active for first period
+            LPMgr_setLPMode(LP_SLEEP);
+            // start join process
+            LORAWAN_RESULT_t status = lora_api_join(lora_join_cb, LORAWAN_SF10, NULL);
+            if (status==LORAWAN_RES_JOIN_OK) {
+                // already joined (?)
+                sm_sendEvent(ctx->mySMId, ME_LORA_JOIN_OK, NULL);
+            } else if (status!=LORAWAN_RES_OK) {
+                // Failed to start join process... this isn't great
+                sm_sendEvent(ctx->mySMId, ME_LORA_JOIN_FAIL, NULL);
+            }
+            return SM_STATE_CURRENT;
+        }
+        case SM_EXIT: {
+            // LEDs off
+            ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
+            ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
+            // any low power when not idle will be basic low power MCU (ie with radio and gpios on)
+            LPMgr_setLPMode(LP_DOZE);
+            return SM_STATE_CURRENT;
+        }
+        case SM_TIMEOUT: {
+            // this means join failed (and badly as stack didnt tell us)
+            sm_sendEvent(ctx->mySMId, ME_LORA_JOIN_FAIL, NULL);
+            return SM_STATE_CURRENT;
+        }
+
+        case ME_LORA_JOIN_OK: {
+            log_debug("AC:join ok");
+            // Update to say we are not in stock mode
+            ctx->stockMode = 1;
+            CFMgr_setElement(CFG_UTIL_KEY_STOCK_MODE, &ctx->stockMode, 1);
+            // do a busy cycle immediately
+            return MS_GETTING_SERIAL_MODS;
+        }
+        case ME_LORA_JOIN_FAIL: {
+            // For stock mode, check if we ever managed to join (which sets stock mode to false)
+            if (ctx->stockMode==0) {
+                log_debug("AC:join fail and never joined, going stock mode");
+                return MS_STOCK;
+            }
+            log_debug("AC:join fail wait to retry");
+            return MS_WAIT_JOIN_RETRY;
+        }
+        default: {
+            log_debug("AC:unknown %d in try join", e);
+            return SM_STATE_CURRENT;
+        }
+    }
+    assert(0);      // shouldn't get here
+}
+// if no join, and has never joined, we end up here to be in very low power mode forever...
+static SM_STATE_ID_t State_Stock(void* arg, int e, void* data) {
+    struct appctx* ctx = (struct appctx*)arg;
+    switch(e) {
+        case SM_ENTER: {
+            log_debug("AC:stock forever");
+            // Record time
+            ctx->idleStartTS = TMMgr_getRelTime();
+            // LEDs off, we are sleeping
+            ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
+            ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
+            // and stay idle in deep sleep this time
+            LPMgr_setLPMode(LP_OFF);
+            return SM_STATE_CURRENT;
+        }
+        case SM_EXIT: {
+            // Should not happen!
+            log_debug("AC:stock forever but exiting???");
+            // any low power when not idle will be basic low power MCU (ie with radio and gpios on)
+            LPMgr_setLPMode(LP_DOZE);
+            return SM_STATE_CURRENT;
+        }
+        case SM_TIMEOUT: {
+            return SM_STATE_CURRENT;
+        }
+        default: {
+            log_debug("AC:unknown %d in Idle", e);
+            return SM_STATE_CURRENT;
+        }
+    }
+    assert(0);      // shouldn't get here
+}
+// Wait here in low power until time to retry our join
+static SM_STATE_ID_t State_WaitJoinRetry(void* arg, int e, void* data) {
+    struct appctx* ctx = (struct appctx*)arg;
+    switch(e) {
+        case SM_ENTER: {
+            if (ctx->doReboot) {
+                log_debug("AC:enter wait join retry and reboot pending... bye bye....");
+                RMMgr_reboot(RM_DM_ACTION);
+                // Fall out just in case didn't actually reboot...
+                log_error("AC: should have rebooted!");
+                assert(0);
+            }
+            // Start the retry join timeout  
+            sm_timer_start(ctx->mySMId, ctx->rejoinWaitMins*60000);
+            log_debug("AC:wait retry join : timeout in %d mins", ctx->rejoinWaitMins);
+            // LEDs off
+            ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
+            ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
+            LPMgr_setLPMode(LP_DEEPSLEEP);
+            return SM_STATE_CURRENT;
+        }
+        case SM_EXIT: {
+            // LEDs off
+            ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
+            ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
+            // any low power when not idle will be basic low power MCU (ie with radio and gpios on)
+            LPMgr_setLPMode(LP_DOZE);
+            return SM_STATE_CURRENT;
+        }
+        case SM_TIMEOUT: {
+            // Ok, try join again
+            return MS_TRY_JOIN;
+        }
+        default: {
+            log_debug("AC:unknown %d in wait join retry", e);
+            return SM_STATE_CURRENT;
+        }
+    }
+    assert(0);      // shouldn't get here
+}
+// Idling
 static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
     struct appctx* ctx = (struct appctx*)arg;
     switch(e) {
@@ -196,6 +408,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             log_debug("AC:idle %d secs", ctx->idleTimeCheckSecs);
             // Record time
             ctx->idleStartTS = TMMgr_getRelTime();
+/* No console in idle mode at all - if you want the console, reboot the device...
             // activate console on the uart (if configured). 
             if (startConsole()) {
                 // Stop all leds, and flash slow to show we're in console
@@ -206,12 +419,14 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
                     // start timer for specific event to turn off console if not activated
                 sm_timer_startE(ctx->mySMId, 10000, ME_CONSOLE_TIMEOUT);
             } else {
-                // LEDs off, we are sleeping
+*/
+                // LEDs off, we are deeply sleeping
                 ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
                 ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
                 // and stay idle in deep sleep this time
+                // Note this means that no DL rx should be possible in IDLE state - must wait elsewhere if you expect DL...
                 LPMgr_setLPMode(LP_DEEPSLEEP);
-            }
+//            }
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
@@ -276,6 +491,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             return MS_GETTING_SERIAL_MODS;
         }
         case ME_LORA_RX: {
+            // This should not happen in this state as we are in DEEPSLEEP ie radio off
             if (data!=NULL) {
                 executeDL(ctx, (APP_CORE_DL_t*)data);
             }
@@ -424,11 +640,18 @@ static SM_STATE_ID_t State_GettingParallelMods(void* arg, int e, void* data) {
     }
     assert(0);      // shouldn't get here
 }
-static LORA_TX_RESULT_t tryTX(APP_CORE_UL_t* txmsg, uint8_t dlid, bool willListen) {
-    uint8_t txsz = app_core_msg_ul_finalise(txmsg, dlid, willListen);
+static LORA_TX_RESULT_t tryTX(struct appctx* ctx, bool willListen) {
+    uint8_t txsz = app_core_msg_ul_finalise(&ctx->txmsg, ctx->lastDLId, willListen);
     LORA_TX_RESULT_t res = LORA_TX_ERR_RETRY;
     if (txsz>0) {
-        res = lora_app_tx(&(txmsg->msgs[txmsg->msbNbTxing].payload[0]), txsz, 8000);
+        LORAWAN_RESULT_t txres = lora_api_send(ctx->loraCfg.loraSF, ctx->loraCfg.txPort, ctx->loraCfg.useAck, willListen, 
+                &(ctx->txmsg.msgs[ctx->txmsg.msbNbTxing].payload[0]), txsz, lora_tx_cb, ctx);
+        if (txres==LORAWAN_RES_OK) {
+            res = LORA_TX_OK;
+        } else {
+            res = LORA_TX_ERR_RETRY;
+            log_warn("AC:no UL tx said %d", txres);
+        }
     } else {
         log_info("AC:no UL finalise said %d", txsz);
         res = LORA_TX_NO_TX;    // not an actual error but no tx so no point waiting for result
@@ -443,10 +666,10 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
             log_debug("AC:trying to send UL");
             // start leds for UL
             ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_5HZ, -1);
-            LORA_TX_RESULT_t res = tryTX(&ctx->txmsg, ctx->lastDLId, true);
+            LORA_TX_RESULT_t res = tryTX(ctx, true);
             if (res==LORA_TX_OK) {
-                // this timer should be bigger than the one we give to the tx above... its a belt and braces job
-                sm_timer_start(ctx->mySMId,  25000);
+                // this timer should be big enough to have received any DL triggered by the ULs
+                sm_timer_start(ctx->mySMId,  UL_WAIT_DL_TIMEOUTMS);
                 // ok wait for result
             } else {
                 // want to abort immediately... send myself a result event
@@ -508,10 +731,10 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
             }
             // See if we have another mssg to go. Note we say 'not listening' ie don't send me DL as we haven't 
             // processing any RX yet, so our 'lastDLId' is not up to date and we'll get a repeated action DL!
-            res = tryTX(&ctx->txmsg, ctx->lastDLId, false);
+            res = tryTX(ctx, false);
             if (res==LORA_TX_OK) {
-                // this timer should be bigger than the one we give to the tx above... its a belt and braces job
-                sm_timer_start(ctx->mySMId,  25000);
+                // this timer should be big enough to have received any DL triggered by the ULs
+                sm_timer_start(ctx->mySMId,  UL_WAIT_DL_TIMEOUTMS);
                 // ok wait for result
                 return SM_STATE_CURRENT;
             } else {
@@ -529,11 +752,14 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
 }
 // State table : note can be in any order as the 'id' field is what maps the state id to the rest
 static SM_STATE_t _mySM[MS_LAST] = {
-    {.id=MS_STARTUP,       .name="Startup",   .fn=State_Startup},
-    {.id=MS_IDLE,           .name="Idle",       .fn=State_Idle},
-    {.id=MS_GETTING_SERIAL_MODS,    .name="GettingSerialMods", .fn=State_GettingSerialMods},
-    {.id=MS_GETTING_PARALLEL_MODS,    .name="GettingParallelMods", .fn=State_GettingParallelMods},
-    {.id=MS_SENDING_UL,     .name="SendingUL",  .fn=State_SendingUL},    
+    {.id=MS_STARTUP,            .name="Startup",    .fn=State_Startup},
+    {.id=MS_STOCK,              .name="Stock",      .fn=State_Stock},
+    {.id=MS_TRY_JOIN,           .name="TryJoin",    .fn=State_TryJoin},
+    {.id=MS_WAIT_JOIN_RETRY,    .name="WaitJoinRetry",       .fn=State_WaitJoinRetry},
+    {.id=MS_IDLE,               .name="Idle",       .fn=State_Idle},
+    {.id=MS_GETTING_SERIAL_MODS, .name="GettingSerialMods", .fn=State_GettingSerialMods},
+    {.id=MS_GETTING_PARALLEL_MODS, .name="GettingParallelMods", .fn=State_GettingParallelMods},
+    {.id=MS_SENDING_UL,         .name="SendingUL",  .fn=State_SendingUL},    
 };
 
 // Called to start the action, after all sysinit done
@@ -542,20 +768,44 @@ void app_core_start() {
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMovingSecs, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_MINS, &_ctx.idleTimeNotMovingMins, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_CHECK_SECS, &_ctx.idleTimeCheckSecs, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_JOIN_TIMEOUT_SECS, &_ctx.joinTimeCheckSecs, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_RETRY_JOIN_TIME_SECS, &_ctx.rejoinWaitMins, sizeof(uint32_t));
     memset(&_ctx.modsMask[0], 0xff, MOD_MASK_SZ);       // Default every module is active
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MODS_ACTIVE_MASK, &_ctx.modsMask[0], MOD_MASK_SZ);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MAXTIME_UL_MINS, &_ctx.maxTimeBetweenULMins, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_DL_ID, &_ctx.lastDLId, sizeof(uint8_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_STOCK_MODE, &_ctx.stockMode, sizeof(uint8_t));
     CFMgr_registerCB(configChangedCB);      // For changes to our config
 
     registerActions();
 
     // deveui, and other lora setup config are in PROM
-    lora_app_init(lora_tx_cb, lora_rx_cb);
-
+//    lora_app_init(lora_tx_cb, lora_rx_cb);
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_DEVEUI, &_ctx.loraCfg.deveui, 8);
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_APPEUI, &_ctx.loraCfg.appeui, 8);
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_APPKEY, &_ctx.loraCfg.appkey, 16);
+//    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_DEVADDR, &_loraCfg.devAddr, sizeof(uint32_t));
+//    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_NWKSKEY, &_loraCfg.nwkSkey, 16);
+//    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_APPSKEY, &_loraCfg.appSkey, 16);
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_ADREN, &_ctx.loraCfg.useAdr, sizeof(bool));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_ACKEN, &_ctx.loraCfg.useAck, sizeof(bool));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_SF, &_ctx.loraCfg.loraSF, sizeof(uint8_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_TXPOWER, &_ctx.loraCfg.txPower, sizeof(int8_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_TXPORT, &_ctx.loraCfg.txPort, sizeof(uint8_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_RXPORT, &_ctx.loraCfg.rxPort, sizeof(uint8_t));    
+    lora_api_init(&_ctx.loraCfg.deveui[0], &_ctx.loraCfg.appeui[0], &_ctx.loraCfg.appkey[0]); 
+    LORAWAN_RESULT_t rxres = lora_api_registerRxCB(-1, lora_rx_cb, &_ctx);  
+    if (rxres!=LORAWAN_RES_OK) {
+        // oops
+        log_warn("failed to register rx cb with lora api %d", rxres);
+        assert(0);
+    }	
     // initialise console for use during idle periods if enabled
     if (MYNEWT_VAL(WCONSOLE_ENABLED)!=0) {
         initConsole();
+        log_debug("AC:CN EN");
+    } else {
+        log_warn("AC:CN DIS");
     }
 
     // Do modules immediately on boot by starting in post-idle state
@@ -613,7 +863,7 @@ void AppCore_registerAction(uint8_t id, ACTIONFN_t cb) {
     _ctx.actions[_ctx.nActions].id = id;
     _ctx.actions[_ctx.nActions].fn = cb;
     _ctx.nActions++;
-    log_debug("AC: reg action [%d]", id);
+    log_debug("AC: RA [%d]", id);
 }
 // Find action fn or NULL
 ACTIONFN_t AppCore_findAction(uint8_t id) {

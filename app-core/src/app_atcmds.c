@@ -21,7 +21,7 @@
 #include "wyres-generic/configmgr.h"
 #include "wyres-generic/timemgr.h"
 #include "wyres-generic/sensormgr.h"
-#include "wyres-generic/loraapp.h"
+#include "loraapi/loraapi.h"
 
 #include "app-core/app_core.h"
 #include "app-core/app_console.h"
@@ -255,7 +255,7 @@ static ATRESULT atcmd_setlogs(uint8_t nargs, char* argv[]) {
 static ATRESULT atcmd_info(uint8_t nargs, char* argv[]) {
     // Display uptime, lora state, battery, last reboot reason, last assert etc etc
     wconsole_println("Uptime:%dh %dm", TMMgr_getRelTime()/3600000, TMMgr_getRelTime()/60000);
-    wconsole_println("LoraJoin:%s", lora_app_isJoined()?"OK":"NOK");
+    wconsole_println("LoraJoin:%s", lora_api_isJoined()?"OK":"NOK");
     wconsole_println("Battery:%d", SRMgr_getBatterymV());
     wconsole_println("Light:%d", SRMgr_getLight());
     wconsole_println("ResetReason: %04x", RMMgr_getResetReasonCode());
