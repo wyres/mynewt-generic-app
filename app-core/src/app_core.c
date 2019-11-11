@@ -21,10 +21,11 @@
 #include "wyres-generic/movementmgr.h"
 #include "wyres-generic/sm_exec.h"
 #include "wyres-generic/lowpowermgr.h"
-//#include "wyres-generic/loraapp.h"
 #include "wyres-generic/timemgr.h"
 #include "wyres-generic/rebootmgr.h"
+
 #include "loraapi/loraapi.h"
+
 #include "app-core/app_console.h"
 #include "app-core/app_core.h"
 #include "app-core/app_msg.h"
@@ -35,7 +36,7 @@
 #define MOD_MASK_SZ ((APP_MOD_LAST/8)+1)
 // The timeout before leaving UL sending state. Should be big enough to allow any DL to have arrived 
 #define UL_WAIT_DL_TIMEOUTMS (20000)       
- 
+
 // State machine for core app
 // COntext data
 static struct appctx {
@@ -79,6 +80,7 @@ static struct appctx {
         uint8_t appeui[8];
         uint8_t appkey[16];
     } loraCfg;
+    APP_CORE_FW_t fw;
 } _ctx = {
     .doReboot=false,
     .nMods=0,
@@ -763,8 +765,16 @@ static SM_STATE_t _mySM[MS_LAST] = {
 };
 
 // Called to start the action, after all sysinit done
-void app_core_start() {
+void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const char* fwname) {
     log_debug("AC:init");
+    // Store build data for anyone that wants it
+    _ctx.fw.fwmaj = fwmaj;
+    _ctx.fw.fwmin = fwmin;
+    _ctx.fw.fwbuild = fwbuild;
+    _ctx.fw.fwdate = fwdate;
+    _ctx.fw.fwname = fwname;
+
+    // Get the app core config
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMovingSecs, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_MINS, &_ctx.idleTimeNotMovingMins, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_CHECK_SECS, &_ctx.idleTimeCheckSecs, sizeof(uint32_t));
@@ -780,13 +790,12 @@ void app_core_start() {
     registerActions();
 
     // deveui, and other lora setup config are in PROM
-//    lora_app_init(lora_tx_cb, lora_rx_cb);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_DEVEUI, &_ctx.loraCfg.deveui, 8);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_APPEUI, &_ctx.loraCfg.appeui, 8);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_APPKEY, &_ctx.loraCfg.appkey, 16);
-//    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_DEVADDR, &_loraCfg.devAddr, sizeof(uint32_t));
-//    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_NWKSKEY, &_loraCfg.nwkSkey, 16);
-//    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_APPSKEY, &_loraCfg.appSkey, 16);
+//    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_DEVADDR, &_ctx.loraCfg.devAddr, sizeof(uint32_t));
+//    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_NWKSKEY, &_ctx.loraCfg.nwkSkey, 16);
+//    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_APPSKEY, &_ctx.loraCfg.appSkey, 16);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_ADREN, &_ctx.loraCfg.useAdr, sizeof(bool));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_ACKEN, &_ctx.loraCfg.useAck, sizeof(bool));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_SF, &_ctx.loraCfg.loraSF, sizeof(uint8_t));
@@ -811,6 +820,11 @@ void app_core_start() {
     // Do modules immediately on boot by starting in post-idle state
     _ctx.mySMId = sm_init("app-core", _mySM, MS_LAST, MS_STARTUP, &_ctx);
     sm_start(_ctx.mySMId);
+}
+
+// Get fw build info
+APP_CORE_FW_t* AppCore_getFwInfo() {
+    return &_ctx.fw;
 }
 
 // core api for modules
@@ -879,7 +893,7 @@ ACTIONFN_t AppCore_findAction(uint8_t id) {
 uint32_t AppCore_lastULTime() {
     return _ctx.lastULTime;
 }
-// Time in ms
+// Time in ms to next UL
 uint32_t AppCore_getTimeToNextUL() {
     return TMMgr_getRelTime() - _ctx.idleStartTS;
 }

@@ -81,7 +81,7 @@ uint8_t app_core_msg_ul_finalise(APP_CORE_UL_t* ul, uint8_t lastDLId, bool willL
     ul->msbNbTxing++;
     if (ul->msbNbTxing<APP_CORE_UL_MAX_NB) {
         // 2 byte fixed header: 
-        //	0 : b0-3: ULrespid, b4-5: protocol version (0), b6: 1=listening for DL, 0=not listening, b7: force even parity for this byte
+        //	0 : b0-3: ULrespid, b4-5: protocol version, b6: 1=listening for DL, 0=not listening, b7: force even parity for this byte
         //	1 : length of following TLV block
         //	- allows backend to reliably (mostly) detect this type of message - if 1st byte parity=0 and 2nd byte value+2=message length then its probably this format....
         //	- 00 00 is the most basic valid message

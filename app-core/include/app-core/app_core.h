@@ -20,8 +20,8 @@
 extern "C" {
 #endif
 
-// Call from main() after sysinit() to start app core goodness
-void app_core_start();
+// Call from main() after sysinit() to start app core goodness. Tell it the build info.
+void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const char* fwname);
 
 // Core api for modules to implement
 typedef uint32_t (*APP_MOD_START_FN_t)();       // returns time required for its operation in ms
@@ -38,6 +38,14 @@ typedef struct {
     APP_MOD_GETULDATA_FN_t getULDataCB;
     APP_MOD_TIC_FN_t ticCB;                 // may be NULL if no ops to do
 } APP_CORE_API_t;
+// Info about this build
+typedef struct {
+        int fwmaj;
+        int fwmin;
+        int fwbuild;
+        const char* fwdate;
+        const char* fwname;
+} APP_CORE_FW_t;
 
 // Add module ids here (before the APP_MOD_LAST enum)
 typedef enum { APP_MOD_ENV=0, APP_MOD_GPS=1, APP_MOD_BLE_SCAN_NAV=2, APP_MOD_BLE_SCAN_TAGS=3, APP_MOD_BLE_IB=4, APP_MOD_IO=5, APP_MOD_LORA=6, APP_MOD_LAST } APP_MOD_ID_t;
@@ -49,7 +57,7 @@ void AppCore_registerModule(APP_MOD_ID_t id, APP_CORE_API_t* mcbs, APP_MOD_EXEC_
 bool AppCore_getModuleState(APP_MOD_ID_t mid);
 // set module active/not active
 void AppCore_setModuleState(APP_MOD_ID_t mid, bool active);
-// Timestamp of last UL (attempted)
+// Timestamp (relative to boot) of last UL (attempted)
 uint32_t AppCore_lastULTime();
 // Time in ms to next UL in theory
 uint32_t AppCore_getTimeToNextUL();
@@ -61,6 +69,8 @@ void AppCore_module_done(APP_MOD_ID_t id);
 void AppCore_registerAction(uint8_t id, ACTIONFN_t cb);
 // Find an action handler or NULL
 ACTIONFN_t AppCore_findAction(uint8_t id);
+// Get info about this build
+APP_CORE_FW_t* AppCore_getFwInfo();
 
 // app core TLV tags for UL : 1 byte sized, explicit values assigned, never change already allocated values!
 typedef enum { APP_CORE_UL_VERSION=0, APP_CORE_UL_UPTIME=1, APP_CORE_UL_CONFIG=2,

@@ -17,6 +17,7 @@
 #include "os/os.h"
 
 #include "wyres-generic/wutils.h"
+#include "wyres-generic/timemgr.h"
 #include "wyres-generic/rebootmgr.h"
 #include "wyres-generic/movementmgr.h"
 #include "wyres-generic/sensormgr.h"
@@ -27,7 +28,7 @@
 
 // may wish to may configurable?
 #define NB_REBOOT_INFOS (4)
-
+#define FORCE_UL_INTERVAL_MS (60*60*1000)
 // COntext data
 static struct appctx {
     uint8_t sentRebootInfo;
@@ -60,6 +61,9 @@ static void deepsleep() {
 }
 static bool getData(APP_CORE_UL_t* ul) {
     log_info("ME: UL env");
+    // Decide if gonna force the UL to include current values and to be sent. 
+    // TODO note this essentially override the 'max time between UL' setting in the appcore code
+    bool forceULData = ((TMMgr_getRelTime() - AppCore_lastULTime()) > FORCE_UL_INTERVAL_MS);
     // if first N times after reboot, add reboot info
     if (_ctx.sentRebootInfo >0) {
         _ctx.sentRebootInfo--;
@@ -70,6 +74,19 @@ static bool getData(APP_CORE_UL_t* ul) {
         // last asset reason
         void* la = RMMgr_getLastAssertCallerFn();
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_LASTASSERT, sizeof(la), &la);
+        // firmware version, build date
+        APP_CORE_FW_t* fw = AppCore_getFwInfo();
+        // Only sending up the minimum
+        struct {
+            uint8_t maj;
+            uint8_t min;
+            uint8_t build;
+        } fwdata = {
+            .maj = (uint8_t)(fw->fwmaj),
+            .min = (uint8_t)(fw->fwmin),
+            .build = (uint8_t)(fw->fwbuild),
+        };
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_VERSION, sizeof(fwdata), &fwdata);
     }
     // get accelero if changed since last UL
     if (MMMgr_getLastMovedTime() >= AppCore_lastULTime()) {
@@ -100,7 +117,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_SHOCK, sizeof(v), &v);
     }
     // orientation direct (if changed) 
-    if (MMMgr_getLastOrientTime() >= AppCore_lastULTime()) {
+    if (forceULData || MMMgr_getLastOrientTime() >= AppCore_lastULTime()) {
         struct {
             uint8_t orient;
             int8_t x;
@@ -114,22 +131,22 @@ static bool getData(APP_CORE_UL_t* ul) {
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_ORIENT, sizeof(v), &v);
     }
     // Basic environmental stuff
-    if (SRMgr_hasLightChanged()) {
+    if (forceULData || SRMgr_hasLightChanged()) {
         // get luminaire
         uint8_t vl = SRMgr_getLight();
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_LIGHT, sizeof(vl), &vl);
     }
-    if (SRMgr_hasBattChanged()) {
+    if (forceULData || SRMgr_hasBattChanged()) {
         // get battery
         uint16_t vb = SRMgr_getBatterymV();
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_BATTERY, sizeof(vb), &vb);
     }
-    if (SRMgr_hasPressureChanged()) {
+    if (forceULData || SRMgr_hasPressureChanged()) {
         // get altimetre
         uint32_t vp = SRMgr_getPressurePa();
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_PRESSURE, sizeof(vp), &vp);
     }
-    if (SRMgr_hasTempChanged()) {
+    if (forceULData || SRMgr_hasTempChanged()) {
         // get temperature
         int16_t vt = SRMgr_getTempdC();
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_TEMP, sizeof(vt), &vt);
@@ -145,7 +162,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_ADC2, sizeof(vv2), &vv2);
     }
     // get micro if noise detected
-    if (SRMgr_getLastNoiseTime() >= AppCore_lastULTime()) {
+    if (forceULData || SRMgr_getLastNoiseTime() >= AppCore_lastULTime()) {
         struct {
             uint32_t time;
             uint8_t freqkHz;
@@ -158,7 +175,7 @@ static bool getData(APP_CORE_UL_t* ul) {
     }
 
     // get button
-    if (SRMgr_getLastButtonPressTS() >= AppCore_lastULTime()) {
+    if (forceULData || SRMgr_getLastButtonPressTS() >= AppCore_lastULTime()) {
         struct {
             uint32_t pressTS;
             uint32_t releaseTS;
@@ -171,7 +188,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         v.lastPressType = SRMgr_getLastButtonPressType();
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_BUTTON, sizeof(v), &v);
     }
-    return SRMgr_updateEnvs();     // update those that changed as we have added them to the UL... and return the flag that says if any changed
+    return forceULData || SRMgr_updateEnvs();     // update those that changed as we have added them to the UL... and return the flag that says if any changed
 }
 
 static APP_CORE_API_t _api = {

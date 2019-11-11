@@ -25,12 +25,13 @@ extern "C" {
 #define APP_CORE_DL_MAX_SZ (250)    // as we don't control it
 #define LORAWAN_UL_PORT 3
 #define LORAWAN_DL_PORT 3
-#define APP_CORE_MSGS_VERSION_UL (1)
+#define APP_CORE_MSGS_VERSION_UL (1)        // our first usable version is v1
 #define APP_CORE_MSGS_VERSION_DL (0)
 
-// 1st 2 bytes are header, then TLV blocks (1 byte T, 1byte L, n bytes V)
-// byte 0 : b0-3 : lastDLId, b4-5 : protocol version, b6 : config stock, b7 : even parity bit
-// byte 1 : length of following TLV section
+// UL Message : 1st 2 bytes are header, then TLV blocks (1 byte T, 1byte L, n bytes V)
+// 2 byte fixed header: 
+//	0 : b0-3: ULrespid, b4-5: protocol version, b6: 1=listening for DL, 0=not listening, b7: force even parity for this byte
+//	1 : length of following TLV block
 typedef struct {
     struct {
         uint8_t payload[APP_CORE_UL_MAX_SZ];
