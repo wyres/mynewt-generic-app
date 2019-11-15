@@ -132,6 +132,8 @@ bool app_core_msg_dl_execute(APP_CORE_DL_t* msg) {
         ACTIONFN_t afn = AppCore_findAction(action);
         if (afn!=NULL) {
             (*afn)(&msg->payload[curoff], len);
+        } else {
+            log_warn("DLA: unknown action %d", action);
         }
         curoff+=len;
     }

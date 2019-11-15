@@ -49,6 +49,7 @@ static struct appctx {
     } mods[MAX_MODS];   // registered modules api fns
     uint8_t modsMask[MOD_MASK_SZ];       // bit mask to indicate if module is active or not currently
     int currentSerialModIdx;
+    int requestedModule;        // If forced UL then it may request only one module is run
     bool ulIsCrit;              // during data collection, module can signal critical data change ie must send UL
     APP_CORE_UL_t txmsg;        // for building UL messages
     APP_CORE_DL_t rxmsg;        // for decoding DL messages
@@ -85,6 +86,7 @@ static struct appctx {
     .doReboot=false,
     .nMods=0,
     .nActions=0,
+    .requestedModule=-1,
     .idleTimeMovingSecs=5*60,           // 5mins
     .idleTimeNotMovingMins=120,      // 2 hours
     .idleTimeCheckSecs=60,   
@@ -410,29 +412,16 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             log_debug("AC:idle %d secs", ctx->idleTimeCheckSecs);
             // Record time
             ctx->idleStartTS = TMMgr_getRelTime();
-/* No console in idle mode at all - if you want the console, reboot the device...
-            // activate console on the uart (if configured). 
-            if (startConsole()) {
-                // Stop all leds, and flash slow to show we're in console
-                ledStart(MYNEWT_VAL(MODS_ACTIVE_LED), FLASH_MIN, -1);
-                ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_MIN, -1);
-                // Set desired low power mode to be just sleep as console is active for first period
-                LPMgr_setLPMode(LP_SLEEP);
-                    // start timer for specific event to turn off console if not activated
-                sm_timer_startE(ctx->mySMId, 10000, ME_CONSOLE_TIMEOUT);
-            } else {
-*/
-                // LEDs off, we are deeply sleeping
-                ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
-                ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
-                // and stay idle in deep sleep this time
-                // Note this means that no DL rx should be possible in IDLE state - must wait elsewhere if you expect DL...
-                LPMgr_setLPMode(LP_DEEPSLEEP);
-//            }
+            // LEDs off, we are deeply sleeping
+            ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
+            ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
+            // and stay idle in deep sleep this time
+            // Note this means that no DL rx should be possible in IDLE state - must wait elsewhere if you expect DL...
+            LPMgr_setLPMode(LP_DEEPSLEEP);
+            LPMgr_entersleep();     // fake hook of OS WFI
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
-            stopConsole();
             // LEDs off
             ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
             ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
@@ -441,12 +430,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         case SM_TIMEOUT: {
-            // Only do the loop if console not active, else set timer again
-            if (isConsoleActive()) {
-                log_debug("AC : console active not doing work");
-                sm_timer_start(ctx->mySMId, ctx->idleTimeMovingSecs*1000);
-                return SM_STATE_CURRENT;
-            } 
+            LPMgr_exitsleep();      // TODO fake exit from WFI
             // timeout -> did we move? deal with difference between moving and not moving times
             uint32_t idletimeMS = ctx->idleTimeNotMovingMins * 60000;
             // check if has moved recently and use different timeout
@@ -471,25 +455,23 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
                 }
             }
             log_debug("called tics");
+            LPMgr_setLPMode(LP_DEEPSLEEP);
+            LPMgr_entersleep();     // fake hook of OS WFI
 
             return SM_STATE_CURRENT;
         }
-        // you only get Xs to use console then goes to sleep properly
-        case ME_CONSOLE_TIMEOUT: {
-            if (!isConsoleActive()) {
-                log_debug("AC: console timeout");
-                // No more uarting
-                stopConsole();
-                // LEDs off
-                ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
-                ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
-                // and stay idle in deep sleep this time
-                LPMgr_setLPMode(LP_DEEPSLEEP);
-            } // else console in use, so user must do explicit exit by AT+RUN or wait for global timeout after inactivity
-            return SM_STATE_CURRENT;
-        }
+
         case ME_FORCE_UL: {
-            // TODO deal with request to only run 1 module....
+            // another module woke us up...
+            LPMgr_exitsleep();      // TODO fake exit from WFI
+            // potentially deal with request to only run 1 module.... data is either NULL or 1000+module id
+            _ctx.requestedModule = -1;
+            if (data!=NULL) {
+                int mid = ((uint32_t)data) -1000;
+                if (mid>=0 && mid<MAX_MODS) {
+                    _ctx.requestedModule = mid;
+                }
+            }
             return MS_GETTING_SERIAL_MODS;
         }
         case ME_LORA_RX: {
@@ -551,7 +533,9 @@ static SM_STATE_ID_t State_GettingSerialMods(void* arg, int e, void* data) {
             }
             // Find next serial one to run or goto parallels if all done
             for(int i=(ctx->currentSerialModIdx+1);i<ctx->nMods;i++) {
-                if (isModActive(ctx->modsMask, ctx->mods[i].id)) {
+                // Module is selected iff we are NOT explicitly requesting 1 module and its active, OR it is the one requested
+                if ((ctx->requestedModule<0 && isModActive(ctx->modsMask, ctx->mods[i].id)) || 
+                        (ctx->mods[i].id == ctx->requestedModule)) {
                     if (ctx->mods[i].exec == EXEC_SERIAL) {
                         ctx->currentSerialModIdx = i;
                         uint32_t timeReqd = (*(ctx->mods[i].api->startCB))();
@@ -588,7 +572,9 @@ static SM_STATE_ID_t State_GettingParallelMods(void* arg, int e, void* data) {
             // and tell mods to go for max timeout they require
             for(int i=0;i<ctx->nMods;i++) {
 //                log_debug("Pmod %d for mask %x", ctx->mods[i].id,  ctx->modsMask[0]);
-                if (isModActive(ctx->modsMask, ctx->mods[i].id)) {
+                // Module is selected iff we are NOT explicitly requesting 1 module and its active, OR it is the one requested
+                if ((ctx->requestedModule<0 && isModActive(ctx->modsMask, ctx->mods[i].id)) || 
+                        (ctx->mods[i].id == ctx->requestedModule)) {
                     if (ctx->mods[i].exec==EXEC_PARALLEL) {
                         uint32_t timeReqd = (*(ctx->mods[i].api->startCB))();
                         if (timeReqd > modtime) {
@@ -617,7 +603,9 @@ static SM_STATE_ID_t State_GettingParallelMods(void* arg, int e, void* data) {
             // Note that to mediate between modules that use same IOs eg I2C or UART (with UART selector)
             // they should be "serial" type not parallel            
             for(int i=0;i<ctx->nMods;i++) {
-                if (isModActive(ctx->modsMask, ctx->mods[i].id)) {
+                // Module is selected iff we are NOT explicitly requesting 1 module and its active, OR it is the one requested
+                if ((ctx->requestedModule<0 && isModActive(ctx->modsMask, ctx->mods[i].id)) || 
+                        (ctx->mods[i].id == ctx->requestedModule)) {
                     if (ctx->mods[i].exec==EXEC_PARALLEL) {
                         // Get the data, and set the flag if module says the ul MUST be sent
                         ctx->ulIsCrit |= (*(ctx->mods[i].api->getULDataCB))(&ctx->txmsg);
@@ -899,7 +887,7 @@ uint32_t AppCore_getTimeToNextUL() {
 }
 // Request stop idle and goto UL phase now
 // optionally request 'fast' UL ie just 1 module to let do data collection
-// TODO (required for fast button UL sending)
+//  (required for fast button UL sending)
 bool AppCore_forceUL(int reqModule) {
     void* ed = NULL;
     if (reqModule>=0 && reqModule<APP_MOD_LAST) {
@@ -996,6 +984,36 @@ static void A_getConfig(uint8_t* v, uint8_t l) {
 static void A_fota(uint8_t* v, uint8_t l) {
     log_info("AC:action FOTA (TBI)");
 }
+
+static void A_flashled(int8_t led, uint8_t* v, uint8_t l) {
+    if (l!=2) {
+        log_warn("AC:ignore action flash led1 as bad param len %d",l);
+        return;
+    }
+    // b0 = time in 100ms units -> convert to seconds
+    int time = (*v / 10);
+    if (time<1) {
+        time = 1;
+    }
+    // b1 = frequency in Hz
+    int freq = *(v+1);
+    log_info("AC:action flash led %d %dms @%dHz", led, time, freq);
+    if (freq<1) {
+        ledRequest(led, FLASH_05HZ, time, LED_REQ_INTERUPT);
+    } else if (freq==1) {
+        ledRequest(led, FLASH_1HZ, time, LED_REQ_INTERUPT);
+    } else if (freq==2) {
+        ledRequest(led, FLASH_2HZ, time, LED_REQ_INTERUPT);
+    } else {
+        ledRequest(led, FLASH_5HZ, time, LED_REQ_INTERUPT);
+    }
+}
+static void A_flashled1(uint8_t* v, uint8_t l) {
+    A_flashled(MYNEWT_VAL(MODS_ACTIVE_LED), v, l);
+}
+static void A_flashled2(uint8_t* v, uint8_t l) {
+    A_flashled(MYNEWT_VAL(NET_ACTIVE_LED), v, l);
+}
 static void A_settime(uint8_t* v, uint8_t l) {
     log_info("AC:action SETTIME");
     uint32_t now = readUINT32LE(v, l);
@@ -1012,6 +1030,8 @@ static void registerActions() {
     AppCore_registerAction(APP_CORE_DL_SET_CONFIG, &A_setConfig);
     AppCore_registerAction(APP_CORE_DL_GET_CONFIG, &A_getConfig);
     AppCore_registerAction(APP_CORE_DL_SET_UTCTIME, &A_settime);
+    AppCore_registerAction(APP_CORE_DL_FLASH_LED1, &A_flashled1);
+    AppCore_registerAction(APP_CORE_DL_FLASH_LED2, &A_flashled2);
     AppCore_registerAction(APP_CORE_DL_FOTA, &A_fota);
     AppCore_registerAction(APP_CORE_DL_GET_MODS, &A_getmods);
 }
