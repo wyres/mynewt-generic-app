@@ -41,6 +41,7 @@
 // COntext data
 static struct appctx {
     SM_ID_t mySMId;
+    bool deviceConfigOk;
     uint8_t nMods;
     struct {
         APP_MOD_ID_t id;
@@ -105,12 +106,9 @@ static struct appctx {
         .loraSF=LORAWAN_SF10,      
         .txPower=14,
        .txTimeoutMs=10000,
-//    .deveui = {0x38,0xE8,0xEB,0xE0, 0x00, 0x00, 0x0d, 0x78},
-       .deveui = {0x38,0xb8,0xeb,0xe0, 0x00, 0x00, 0xFF, 0xFF},
-//    .appeui = {0x01,0x23,0x45,0x67, 0x89, 0xab, 0xcd, 0xef},
-//    .appeui = {0x38,0xE8,0xEB,0xEA, 0xBC, 0xDE, 0xF0, 0x42},
       .appeui = {0x38,0xE8,0xEB,0xE0, 0x00, 0x00, 0x00, 0x00},
-      .appkey = {0x00, 0x11, 0x22, 0x33, 0x44, 0x55, 0x66, 0x77, 0x88, 0x99, 0xAA, 0xBB, 0xCC, 0xDD, 0xEE, 0xFF},
+      // note devEUI/appKey cannot have valid defaults as are specific to every device
+      // These should be set either via AT command or initial factory PROM programming
     },
 };
 
@@ -224,16 +222,28 @@ static SM_STATE_ID_t State_Startup(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         case SM_TIMEOUT: {
-            // Only do the loop if console not active, else must do AT+RUN
+            // Only do the loop if console not active, else must do AT+RUN or have idle for 30s
+            // This protects against console activate by UART bad input once, and then draining battery
             if (isConsoleActive()) {
-                log_debug("AC : console active stays in startup mode");
+                log_debug("AC : console active stays in startup mode (for next 30s)");
+                // exit by timer if no at commands received
+                sm_timer_start(ctx->mySMId, 30*1000);
                 return SM_STATE_CURRENT;
             } 
-            // Starts by joining
-            return MS_TRY_JOIN;
+            // exit startup by the specific event
+            sm_sendEvent(ctx->mySMId, ME_FORCE_UL, NULL);
+            return SM_STATE_CURRENT;
         }
+        // Force UL is how we say go...
         case ME_FORCE_UL: {
-            return MS_TRY_JOIN;
+            // Can we go for normal operation?
+            if (ctx->deviceConfigOk) {
+                // Starts by joining
+                return MS_TRY_JOIN;
+            } else {
+                log_warn("AC: critical device config not ok->STOCK mode");
+                return MS_STOCK;
+            }
         }
 
         default: {
@@ -778,9 +788,14 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const
     registerActions();
 
     // deveui, and other lora setup config are in PROM
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_DEVEUI, &_ctx.loraCfg.deveui, 8);
+    // any config that is critical is checked for existance - if it isn't already in PROM we have no reasonable
+    // default, and so cannot run -> we will take appropriate action in the state machine
+    _ctx.deviceConfigOk = true;
+    // devEUI is critical
+    _ctx.deviceConfigOk &= (CFMgr_getElement(CFG_UTIL_KEY_LORA_DEVEUI, &_ctx.loraCfg.deveui, 8)==8);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_APPEUI, &_ctx.loraCfg.appeui, 8);
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_APPKEY, &_ctx.loraCfg.appkey, 16);
+    // appKey is critical
+    _ctx.deviceConfigOk &= (CFMgr_getElement(CFG_UTIL_KEY_LORA_APPKEY, &_ctx.loraCfg.appkey, 16)==16);
 //    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_DEVADDR, &_ctx.loraCfg.devAddr, sizeof(uint32_t));
 //    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_NWKSKEY, &_ctx.loraCfg.nwkSkey, 16);
 //    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_APPSKEY, &_ctx.loraCfg.appSkey, 16);
@@ -789,7 +804,8 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_SF, &_ctx.loraCfg.loraSF, sizeof(uint8_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_TXPOWER, &_ctx.loraCfg.txPower, sizeof(int8_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_TXPORT, &_ctx.loraCfg.txPort, sizeof(uint8_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_RXPORT, &_ctx.loraCfg.rxPort, sizeof(uint8_t));    
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_RXPORT, &_ctx.loraCfg.rxPort, sizeof(uint8_t));
+    // Note the api wants the ids in init -> this means if user changes in AT then they need to reboot...    
     lora_api_init(&_ctx.loraCfg.deveui[0], &_ctx.loraCfg.appeui[0], &_ctx.loraCfg.appkey[0]); 
     LORAWAN_RESULT_t rxres = lora_api_registerRxCB(-1, lora_rx_cb, &_ctx);  
     if (rxres!=LORAWAN_RES_OK) {
@@ -805,7 +821,7 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const
         log_warn("AC:CN DIS");
     }
 
-    // Do modules immediately on boot by starting in post-idle state
+    // post boot we do STARTUP state (as its name suggests)
     _ctx.mySMId = sm_init("app-core", _mySM, MS_LAST, MS_STARTUP, &_ctx);
     sm_start(_ctx.mySMId);
 }

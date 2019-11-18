@@ -27,26 +27,29 @@ The app-core framework codifies a standard state machine for the code operation 
 It has the 'app-core' control, and 1 or more 'mod-X' packages which define independant modules,
 which will be called at the appropriate points to collect their data ready for UL.
 
-The 'app-core' package governs the central execution, with 5 specific phases:
-- phase 1a : init and startup
-This initialisation phase, using the mynewt sysinit mechanisme, to allow the 'modules' to be initialised
+The 'app-core' package governs the central execution. It starts with an initialisation phase. 
+This uses the mynewt sysinit mechanisme, to allow the 'modules' to be initialised
 based on their pkg.yml sysinit values, and to register with the app-core system as both modules to be
 executed and as the destination of DL actions. Registeration of a module essentially consists of it indicating the set of 
 functions that implement the API required.
-Once sysinit has finished, app-core state machine enters the 'startup' state, which activates the console for a 
-specific period of time for config AT commands. Once expired, the SM goes to the JOIN attempt phase.
-- phase 1b: JOIN attempt / retries.
-The appcore asks the lorawan api to JOIN the network. If the join attempt fails, then either the code goes into STOCK mode (if it has NEVER joined) , or into a sleep for X minutes before retrying the JOIN. If the JOIN is sucessful then stock mode is disabled, and transition to the 1st collection cycle state 2a.
-- phase 1c : STOCK mode
-This consists of deep sleep until manually reset and is intended for devices held in stock.
-- phase 2a : data collection from modules that must be executed in 'serial' mode ie when no other module is also executing.
+Once sysinit has finished, app-core state machine is run, beginning in the 'startup' state.
+State machine:
+STARTUP: activates the console for a specific period of time for config AT commands. Once expired, the SM checks if all 'critical' config was found in the PROM (devEUI/appKey currently). If so, it goes to the TRYJOIN phase, else it immediately enters STOCK mode.
+TRY-JOIN / RETRY-JOIN:
+The appcore asks the lorawan api to JOIN the network. If the join attempt fails, then either the code goes into STOCK mode (if it has NEVER joined) , or into RETRY-JOIN, to sleep for X minutes before retrying the JOIN. If the JOIN is sucessful then stock mode is disabled, and transition to GETTING-SERIAL.
+STOCK:
+This consists of deep sleep until manually reset and is intended for devices held in stock, either because they have no valid config, or because the local lorawan network is not configured to let them JOIN.
+GETTING-SERIAL: 
+Data collection from modules that must be executed in 'serial' mode ie when no other module is also executing.
 This lets a module be sure its use of hardware specific elements is not in competition with other modules. The execution time 
 each module requires is returned from its start() method, although a module can indicate an earlier termination at any time.
-- phase 2b : data collection from modules that can execute in parallel. This lasts as long as the longest module timeout.
-- phase 3 : lorawan UL : the collected data in 1 or more messages is sent as UL messages. Any DL packet received is decoded and the actions within are interpreted.
-- phase 4 : idleness : the machine sleeps globally for the configured amount of time. It actually wakes every 60s and checks for movement as the idle time may be set differently for the moving/not moving cases.
-A module may also register a 'tic' hook ie a function which is called during these regular wakeups to perform an action.
-During the first 10s of the idle phase, if configured, the console is active for AT commands. The rest of the time it is inactive to achieve the lowest current consumation.
+GETTING-PARALLEL: 
+Data collection from modules that can execute in parallel. This lasts as long as the longest module timeout.
+SENDING-UL: 
+Tx of the lorawan UL : the collected data in 1 or more messages is sent as UL messages. Any DL packet received is decoded and the actions within are interpreted.
+IDLE: idleness : the machine sleeps globally for the configured amount of time. It actually wakes every 60s and checks for movement as the idle time may be set differently for the moving/not moving cases.
+A module may also register a 'tic' hook ie a function which is called during these regular wakeups in IDLE to perform an action.
+During IDLE the lowpower mode requested is DEEPSLEEP to achieve the lowest current consumation.
 
 LoRa Operation
 --------------
@@ -77,6 +80,8 @@ Useful AT commands:
 AppCore module config keys
 ---------------------------
 See app_core.h for the list. Some key ones:
+0101 : devEUI - a critical config value - if not set then the appcore remains in STOCK mode
+0103 : appKey - also a critical config value.
 0401/0402 : idle time when moving (in seconds) / not moving (in minutes)
 0407 : idle period check time (in seconds, 60s default)
 0408 : stock mode : 0 = goto stock mode if JOIN fails, 1=retry if JOIN fails
