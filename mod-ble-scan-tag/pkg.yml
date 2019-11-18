@@ -18,8 +18,8 @@
 #
 
 #pkg.type: pkg
-pkg.name: "mod-ble"
-pkg.description: "generic module for Wyres BLE AT interface driving"
+pkg.name: "mod-ble-scan-tag"
+pkg.description: "appcore module for Wyres BLE scanning for tag type ibeacons"
 pkg.author: "support@wyres.fr"
 pkg.homepage: "http://www.wyres.fr/"
 pkg.keywords:
@@ -29,5 +29,7 @@ pkg.deps:
     - "@apache-mynewt-core/hw/hal"
     - "@generic/generic"
     - "@app-generic/app-core"
+    - "@app-generic/mod-ble"
 
 pkg.init:
+    mod_ble_scan_tag_init : 992

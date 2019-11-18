@@ -1,0 +1,6 @@
+syscfg.defs:
+    MOD_BLE_MAXIBS_NAV:
+        description: "max number of ibeacons that can be sent in UL for navigation"
+        value: 3
+
+syscfg.vals:

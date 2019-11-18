@@ -18,8 +18,8 @@
 #
 
 #pkg.type: pkg
-pkg.name: "mod-ble"
-pkg.description: "generic module for Wyres BLE AT interface driving"
+pkg.name: "mod-ble-scan-nav"
+pkg.description: "app-core module for Wyres BLE for scanning navigation type beacons"
 pkg.author: "support@wyres.fr"
 pkg.homepage: "http://www.wyres.fr/"
 pkg.keywords:
@@ -28,6 +28,8 @@ pkg.deps:
     - "@apache-mynewt-core/kernel/os"
     - "@apache-mynewt-core/hw/hal"
     - "@generic/generic"
+    - "@app-generic/mod-ble"
     - "@app-generic/app-core"
 
 pkg.init:
+    mod_ble_scan_nav_init : 992

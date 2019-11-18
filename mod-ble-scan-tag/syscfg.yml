@@ -1,0 +1,12 @@
+syscfg.defs:
+    MOD_BLE_MAXIBS_TAG_ENTER:
+        description: "max number of ibeacons that can be sent in UL for asset track"
+        value: 10
+    MOD_BLE_MAXIBS_TAG_EXIT:
+        description: "max number of ibeacons that can be sent in UL for asset track"
+        value: 10
+    MOD_BLE_MAXIBS_TAG_INZONE:
+        description: "max number of ibeacons that can be in a zone for asset track"
+        value: 25
+
+syscfg.vals:
