@@ -42,6 +42,7 @@
 static struct appctx {
     SM_ID_t mySMId;
     bool deviceConfigOk;
+    uint8_t lpUserId;
     uint8_t nMods;
     struct {
         APP_MOD_ID_t id;
@@ -274,7 +275,7 @@ static SM_STATE_ID_t State_TryJoin(void* arg, int e, void* data) {
             ledStart(MYNEWT_VAL(MODS_ACTIVE_LED), FLASH_5HZ, -1);
             ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_5HZ, -1);
             // Set desired low power mode to be just sleep as console is active for first period
-            LPMgr_setLPMode(LP_SLEEP);
+            LPMgr_setLPMode(ctx->lpUserId, LP_SLEEP);
             // start join process
             LORAWAN_RESULT_t status = lora_api_join(lora_join_cb, LORAWAN_SF10, NULL);
             if (status==LORAWAN_RES_JOIN_OK) {
@@ -291,7 +292,7 @@ static SM_STATE_ID_t State_TryJoin(void* arg, int e, void* data) {
             ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
             ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
             // any low power when not idle will be basic low power MCU (ie with radio and gpios on)
-            LPMgr_setLPMode(LP_DOZE);
+            LPMgr_setLPMode(ctx->lpUserId, LP_DOZE);
             return SM_STATE_CURRENT;
         }
         case SM_TIMEOUT: {
@@ -336,14 +337,14 @@ static SM_STATE_ID_t State_Stock(void* arg, int e, void* data) {
             ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
             ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
             // and stay idle in deep sleep this time
-            LPMgr_setLPMode(LP_OFF);
+            LPMgr_setLPMode(ctx->lpUserId, LP_OFF);
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
             // Should not happen!
             log_debug("AC:stock forever but exiting???");
             // any low power when not idle will be basic low power MCU (ie with radio and gpios on)
-            LPMgr_setLPMode(LP_DOZE);
+            LPMgr_setLPMode(ctx->lpUserId, LP_DOZE);
             return SM_STATE_CURRENT;
         }
         case SM_TIMEOUT: {
@@ -374,7 +375,7 @@ static SM_STATE_ID_t State_WaitJoinRetry(void* arg, int e, void* data) {
             // LEDs off
             ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
             ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
-            LPMgr_setLPMode(LP_DEEPSLEEP);
+            LPMgr_setLPMode(ctx->lpUserId, LP_DEEPSLEEP);
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
@@ -382,7 +383,7 @@ static SM_STATE_ID_t State_WaitJoinRetry(void* arg, int e, void* data) {
             ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
             ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
             // any low power when not idle will be basic low power MCU (ie with radio and gpios on)
-            LPMgr_setLPMode(LP_DOZE);
+            LPMgr_setLPMode(ctx->lpUserId, LP_DOZE);
             return SM_STATE_CURRENT;
         }
         case SM_TIMEOUT: {
@@ -427,8 +428,8 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
             // and stay idle in deep sleep this time
             // Note this means that no DL rx should be possible in IDLE state - must wait elsewhere if you expect DL...
-            LPMgr_setLPMode(LP_DEEPSLEEP);
-            LPMgr_entersleep();     // fake hook of OS WFI
+            LPMgr_setLPMode(ctx->lpUserId, LP_DEEPSLEEP);
+            log_debug("AC : sleeping @ level %d", LPMgr_entersleep());     // fake hook of OS WFI
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
@@ -436,7 +437,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
             ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
             // any low power when not idle will be basic low power MCU (ie with radio and gpios on)
-            LPMgr_setLPMode(LP_DOZE);
+            LPMgr_setLPMode(ctx->lpUserId, LP_DOZE);
             return SM_STATE_CURRENT;
         }
         case SM_TIMEOUT: {
@@ -454,7 +455,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             }
             // else stay here. reset timeout for next check
             sm_timer_start(ctx->mySMId, ctx->idleTimeCheckSecs*1000);
-            log_debug("AC:reidle %d secs as been idle for %d not more than the limit %d", ctx->idleTimeCheckSecs, dt, idletimeMS);
+            log_debug("AC:reidle %ds as %d < %d", ctx->idleTimeCheckSecs, dt, idletimeMS);
             // Call any module's tic cbs
             for(int i=0;i<ctx->nMods;i++) {
                 if (isModActive(ctx->modsMask, ctx->mods[i].id)) {
@@ -465,8 +466,8 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
                 }
             }
             log_debug("called tics");
-            LPMgr_setLPMode(LP_DEEPSLEEP);
-            LPMgr_entersleep();     // fake hook of OS WFI
+            LPMgr_setLPMode(ctx->lpUserId, LP_DEEPSLEEP);
+            log_debug("AC : sleeping @ level %d", LPMgr_entersleep());     // fake hook of OS WFI
 
             return SM_STATE_CURRENT;
         }
@@ -786,6 +787,8 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const
     CFMgr_registerCB(configChangedCB);      // For changes to our config
 
     registerActions();
+    // register to be able to change LowPower mode (no callback as we don't care about lp changes...)
+    _ctx.lpUserId = LPMgr_register(NULL);
 
     // deveui, and other lora setup config are in PROM
     // any config that is critical is checked for existance - if it isn't already in PROM we have no reasonable
