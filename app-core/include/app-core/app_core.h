@@ -48,7 +48,7 @@ typedef struct {
 } APP_CORE_FW_t;
 
 // Add module ids here (before the APP_MOD_LAST enum)
-typedef enum { APP_MOD_ENV=0, APP_MOD_GPS=1, APP_MOD_BLE_SCAN_NAV=2, APP_MOD_BLE_SCAN_TAGS=3, APP_MOD_BLE_IB=4, APP_MOD_IO=5, APP_MOD_LORA=6, APP_MOD_LAST } APP_MOD_ID_t;
+typedef enum { APP_MOD_ENV=0, APP_MOD_GPS=1, APP_MOD_BLE_SCAN_NAV=2, APP_MOD_BLE_SCAN_TAGS=3, APP_MOD_BLE_IB=4, APP_MOD_IO=5, APP_MOD_PTI=6, APP_MOD_LAST } APP_MOD_ID_t;
 // Should module be run in parallel with others, or must it be alone (eg coz using a shared resource like a bus)?
 typedef enum { EXEC_PARALLEL, EXEC_SERIAL } APP_MOD_EXEC_t;
 // core api for modules
@@ -122,6 +122,11 @@ typedef enum { APP_CORE_DL_REBOOT=1, APP_CORE_DL_SET_CONFIG=2, APP_CORE_DL_GET_C
 #define CFG_UTIL_KEY_GPS_WARM_TIME_SECS          CFGKEY(CFG_MODULE_APP_MOD, 3)
 #define CFG_UTIL_KEY_GPS_POWER_MODE               CFGKEY(CFG_MODULE_APP_MOD, 4)
 #define CFG_UTIL_KEY_GPS_FIX_MODE                 CFGKEY(CFG_MODULE_APP_MOD, 5)
+#define CFG_UTIL_KEY_BLE_IBEACON_UUID          CFGKEY(CFG_MODULE_APP_MOD, 16)
+#define CFG_UTIL_KEY_BLE_IBEACON_MAJOR          CFGKEY(CFG_MODULE_APP_MOD, 17)
+#define CFG_UTIL_KEY_BLE_IBEACON_MINOR          CFGKEY(CFG_MODULE_APP_MOD, 18)
+#define CFG_UTIL_KEY_BLE_IBEACON_PERIOD_MS          CFGKEY(CFG_MODULE_APP_MOD, 19)
+#define CFG_UTIL_KEY_BLE_IBEACON_TXPOWER          CFGKEY(CFG_MODULE_APP_MOD, 20)
 
 #ifdef __cplusplus
 }
