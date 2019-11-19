@@ -351,7 +351,7 @@ static SM_STATE_ID_t State_Stock(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         default: {
-            log_debug("AC:unknown %d in Idle", e);
+            log_debug("AC:? %d in Idle", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -363,7 +363,7 @@ static SM_STATE_ID_t State_WaitJoinRetry(void* arg, int e, void* data) {
     switch(e) {
         case SM_ENTER: {
             if (ctx->doReboot) {
-                log_debug("AC:enter wait join retry and reboot pending... bye bye....");
+                log_debug("AC:wjr reboot bye bye....");
                 RMMgr_reboot(RM_DM_ACTION);
                 // Fall out just in case didn't actually reboot...
                 log_error("AC: should have rebooted!");
@@ -371,7 +371,7 @@ static SM_STATE_ID_t State_WaitJoinRetry(void* arg, int e, void* data) {
             }
             // Start the retry join timeout  
             sm_timer_start(ctx->mySMId, ctx->rejoinWaitMins*60000);
-            log_debug("AC:wait retry join : timeout in %d mins", ctx->rejoinWaitMins);
+            log_debug("AC:wjr : retry %d mins", ctx->rejoinWaitMins);
             // LEDs off
             ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
             ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
@@ -391,7 +391,7 @@ static SM_STATE_ID_t State_WaitJoinRetry(void* arg, int e, void* data) {
             return MS_TRY_JOIN;
         }
         default: {
-            log_debug("AC:unknown %d in wait join retry", e);
+            log_debug("AC:? %d in wait join retry", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -465,7 +465,6 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
                     }
                 }
             }
-            log_debug("called tics");
             LPMgr_setLPMode(ctx->lpUserId, LP_DEEPSLEEP);
             log_debug("AC : sleeping @ level %d", LPMgr_entersleep());     // fake hook of OS WFI
 
@@ -493,7 +492,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         default: {
-            log_debug("AC:unknown %d in Idle", e);
+            log_debug("AC:? %d in Idle", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -566,7 +565,7 @@ static SM_STATE_ID_t State_GettingSerialMods(void* arg, int e, void* data) {
             return MS_GETTING_PARALLEL_MODS;
         }
         default: {
-            log_debug("AC:unknown %d in GettingSerialMods", e);
+            log_debug("AC:? %d in GettingSerialMods", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -635,7 +634,7 @@ static SM_STATE_ID_t State_GettingParallelMods(void* arg, int e, void* data) {
         }
 
         default: {
-            log_debug("AC:unknown %d in GettingParallelMods", e);
+            log_debug("AC:? %d in GettingParallelMods", e);
             return SM_STATE_CURRENT;
         }
     }
@@ -685,7 +684,7 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
         }
         case SM_TIMEOUT: {
             // Done , go idle
-            log_info("AC:done with UL send due to SM timeout");
+            log_info("AC:stop UL send SM timeout");
             return MS_IDLE;
         }
         case ME_LORA_RX: {
@@ -695,7 +694,7 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
                 if (rxmsg->dlId!=ctx->lastDLId) {
                     executeDL(ctx, rxmsg);
                 } else {
-                    log_debug("AC:ignore DL actions as id same as last time (%d)", rxmsg->dlId);
+                    log_debug("AC:ignore DL actions repeat id (%d)", rxmsg->dlId);
                 }
             }
             return SM_STATE_CURRENT;
@@ -813,7 +812,7 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const
     LORAWAN_RESULT_t rxres = lora_api_registerRxCB(-1, lora_rx_cb, &_ctx);  
     if (rxres!=LORAWAN_RES_OK) {
         // oops
-        log_warn("failed to register rx cb with lora api %d", rxres);
+        log_warn("AC:bad register lora rx cb %d", rxres);
         assert(0);
     }	
     // initialise console for use during idle periods if enabled

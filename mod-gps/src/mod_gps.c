@@ -51,19 +51,19 @@ static void gps_cb(GPS_EVENT_TYPE_t e) {
             break;
         }
         case GPS_SATOK: {
-            log_debug("MG: locks on to sats");
+            log_debug("MG: lock");
             break;
         }
         case GPS_NEWFIX: {
             // YES :  read and move on
             gps_getData(&_ctx.goodFix);
             if (_ctx.goodFixCnt++ > MIN_GOOD_FIXES) {
-                log_debug("MG: new fix done");
+                log_debug("MG: fix done");
                 // This means we're done
                 AppCore_module_done(APP_MOD_GPS);
                 gps_stop();
             } else {
-                log_debug("MG: new fix");
+                log_debug("MG: fix");
             }
             break;
         }
@@ -174,7 +174,7 @@ static APP_CORE_API_t _api = {
 
 // DL action to request GPS FIX
 static void A_fixgps(uint8_t* v, uint8_t l) {
-    log_debug("MG:action FIX GPS DEMANDED");
+    log_debug("MG:action FIX ");
     _ctx.fixDemanded = true;
     AppCore_forceUL(-1);        // just do everyone? or check gps module is enabled?
 }
