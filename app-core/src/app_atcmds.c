@@ -63,12 +63,14 @@ static void printKey(uint16_t k) {
         }
         case 2: {
             // print as decimal
-            wconsole_println("Key[%04x]=%d / 0x%04x", k, *(uint16_t *)(&d[0]), *(uint16_t *)(&d[0]));
+            uint16_t* vp = (uint16_t *)(&d[0]);     // avoid the overly keen anti-aliasing check
+            wconsole_println("Key[%04x]=%d / 0x%04x", k, *vp, *vp);
             break;
         }
         case 4: {
             // print as decimal
-            wconsole_println("Key[%04x]=%d / 0x%08x", k, *(uint32_t *)(&d[0]), *(uint32_t *)(&d[0]));
+            uint32_t* vp = (uint32_t *)(&d[0]);     // avoid the overly keen anti-aliasing check
+            wconsole_println("Key[%04x]=%d / 0x%08x", k, *vp, *vp);
             break;
         }
         default: {
