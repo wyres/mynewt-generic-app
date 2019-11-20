@@ -815,6 +815,9 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const
         log_warn("AC:bad register lora rx cb %d", rxres);
         assert(0);
     }	
+    _ctx.fw.loraregion = lora_api_getCurrentRegion();
+    // TODO write fw config into PROM as config key so that it is accessible via AT command or DL action?
+
     // initialise console for use during idle periods if enabled
     if (MYNEWT_VAL(WCONSOLE_ENABLED)!=0) {
         initConsole();

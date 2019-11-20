@@ -40,11 +40,12 @@ typedef struct {
 } APP_CORE_API_t;
 // Info about this build
 typedef struct {
-        int fwmaj;
-        int fwmin;
-        int fwbuild;
-        const char* fwdate;
-        const char* fwname;
+    int fwmaj;
+    int fwmin;
+    int fwbuild;
+    const char* fwdate;
+    const char* fwname;
+    int loraregion;         // as this is a build option
 } APP_CORE_FW_t;
 
 // Add module ids here (before the APP_MOD_LAST enum)
