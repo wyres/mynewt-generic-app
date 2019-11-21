@@ -39,12 +39,13 @@ typedef struct {
     APP_MOD_TIC_FN_t ticCB;                 // may be NULL if no ops to do
 } APP_CORE_API_t;
 // Info about this build
+#define MAXFWSTRING 31
 typedef struct {
     int fwmaj;
     int fwmin;
     int fwbuild;
-    const char* fwdate;
-    const char* fwname;
+    char fwdate[MAXFWSTRING+1];
+    char fwname[MAXFWSTRING+1];
     int loraregion;         // as this is a build option
 } APP_CORE_FW_t;
 
@@ -102,6 +103,7 @@ typedef enum { APP_CORE_DL_REBOOT=1, APP_CORE_DL_SET_CONFIG=2, APP_CORE_DL_GET_C
 #define CFG_UTIL_KEY_STOCK_MODE                 CFGKEY(CFG_MODULE_APP_CORE, 8)
 #define CFG_UTIL_KEY_JOIN_TIMEOUT_SECS          CFGKEY(CFG_MODULE_APP_CORE, 9)
 #define CFG_UTIL_KEY_RETRY_JOIN_TIME_SECS       CFGKEY(CFG_MODULE_APP_CORE, 10)
+#define CFG_UTIL_KEY_FIRMWARE_INFO             CFGKEY(CFG_MODULE_APP_CORE, 11)
 
 // LOra config is in app level for app-core
 #define CFG_UTIL_KEY_LORA_DEVEUI CFGKEY(CFG_MODULE_LORA, 1)

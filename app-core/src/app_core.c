@@ -769,8 +769,8 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const
     _ctx.fw.fwmaj = fwmaj;
     _ctx.fw.fwmin = fwmin;
     _ctx.fw.fwbuild = fwbuild;
-    _ctx.fw.fwdate = fwdate;
-    _ctx.fw.fwname = fwname;
+    strncpy(_ctx.fw.fwdate,fwdate, MAXFWSTRING);
+    strncpy(_ctx.fw.fwname, fwname, MAXFWSTRING);
 
     // Get the app core config
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMovingSecs, sizeof(uint32_t));
@@ -816,7 +816,9 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const
         assert(0);
     }	
     _ctx.fw.loraregion = lora_api_getCurrentRegion();
-    // TODO write fw config into PROM as config key so that it is accessible via AT command or DL action?
+    // write fw config into PROM as config key so that it is accessible via AT command or DL action?
+    // auto creates if 1st run
+    CFMgr_setElement(CFG_UTIL_KEY_FIRMWARE_INFO, &_ctx.fw, sizeof(_ctx.fw));
 
     // initialise console for use during idle periods if enabled
     if (MYNEWT_VAL(WCONSOLE_ENABLED)!=0) {
