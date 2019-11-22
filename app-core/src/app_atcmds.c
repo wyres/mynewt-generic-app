@@ -74,12 +74,13 @@ static void printKey(uint16_t k) {
             break;
         }
         default: {
-            // dump as hex
-            char hs[33];
-            for(int i=0;i<l;i++) {
+            // dump as hex up to 16 bytes
+            char hs[34]; // 16*2 + 1 (terminator) + 1 (for luck)
+            int sz = (l<16?l:16);       // in case its longer!
+            for(int i=0;i<sz;i++) {
                 sprintf(&hs[i*2], "%02x", d[i]);
             }
-            hs[l*2]='\0';
+            hs[sz*2]='\0';
             wconsole_println("Key[%04x]=0x%s", k, hs);
             break;
         }
@@ -255,13 +256,16 @@ static ATRESULT atcmd_setlogs(uint8_t nargs, char* argv[]) {
     return ATCMD_OK;
 }
 static ATRESULT atcmd_info(uint8_t nargs, char* argv[]) {
-    // Display uptime, lora state, battery, last reboot reason, last assert etc etc
-    wconsole_println("Uptime:%dh %dm", TMMgr_getRelTime()/3600000, TMMgr_getRelTime()/60000);
-    wconsole_println("LoraJoin:%s", lora_api_isJoined()?"OK":"NOK");
-    wconsole_println("Battery:%d", SRMgr_getBatterymV());
+    // Display fw info, lora state, battery, last reboot reason, last assert etc etc
+    APP_CORE_FW_t* fwinfo = AppCore_getFwInfo();
+    wconsole_println("FW:%s, v%d/%d.%d @%s", fwinfo->fwname, fwinfo->fwmaj, fwinfo->fwmin, fwinfo->fwbuild, fwinfo->fwdate);
+    int hwrev = MYNEWT_VAL(BSP_HW_REV);
+    wconsole_println("HW:rev%c",hwrev==1?'B':(hwrev==2?'C':(hwrev==3?'D':'?')));
+    wconsole_println("Lora:Region %d Joined:%s", fwinfo->loraregion, lora_api_isJoined()?"YES":"NO");
+    wconsole_println("Batt:%d", SRMgr_getBatterymV());
     wconsole_println("Light:%d", SRMgr_getLight());
-    wconsole_println("ResetReason: %04x", RMMgr_getResetReasonCode());
-    wconsole_println("Last assert [0x%08x]", RMMgr_getLastAssertCallerFn());
+    wconsole_println("LastReset: %04x", RMMgr_getResetReasonCode());
+    wconsole_println("LastAssert [0x%08x]", RMMgr_getLastAssertCallerFn());
     return ATCMD_OK;
 }
 static ATCMD_DEF_t ATCMDS[] = {

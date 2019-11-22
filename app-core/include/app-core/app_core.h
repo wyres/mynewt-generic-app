@@ -41,12 +41,12 @@ typedef struct {
 // Info about this build
 #define MAXFWSTRING 31
 typedef struct {
-    int fwmaj;
-    int fwmin;
-    int fwbuild;
+    uint32_t fwmaj;
+    uint32_t fwmin;
+    uint32_t fwbuild;
     char fwdate[MAXFWSTRING+1];
     char fwname[MAXFWSTRING+1];
-    int loraregion;         // as this is a build option
+    uint32_t loraregion;         // as this is a build option
 } APP_CORE_FW_t;
 
 // Add module ids here (before the APP_MOD_LAST enum)

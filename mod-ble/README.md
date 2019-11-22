@@ -16,3 +16,5 @@ mod-ble
 
 This is the basic BLE definition that only defines the syscfg and ble major number allocations. The other BLE scanning modules
 depend on this one.
+
+NOTE: if using a BLE on the UART without the UART switcher, then note that the console UART  will work at bootup for 30s as usual, but if you leave the console uart connection after that then the communication with the BLE module will NOT work. Unplug the console uart to have the BLE work correctly. (due to the console uart being in parallel with the BLE module, it distrupts the rx/tx when both are active)
