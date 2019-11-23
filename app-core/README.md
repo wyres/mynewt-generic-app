@@ -127,3 +127,15 @@ DL Action handling
 ------------------
 App-core handles the reception and decoding of the DL packets. These consist of a set of 'actions', each with a 1 byte key (defined in app_core.h). Modules can register to execute specific action keys at startup - only 1 module can register for each key and the system will assert() if more than one tries.
 Most of the core actions are handled by the app_core.c file, including reset, get/setcfg and setting UTCTime.
+
+
+mods :
+| module | ID | 
+| --------: | :--------: |
+| APP_MOD_ENV | 0 |
+| APP_MOD_GPS | 1 |
+| APP_MOD_BLE_SCAN_NAV | 2 |
+| APP_MOD_BLE_SCAN_TAGS | 3 |
+| APP_MOD_BLE_IB | 4 |
+| APP_MOD_IO | 5 |
+| APP_MOD_PTI | 6 |
