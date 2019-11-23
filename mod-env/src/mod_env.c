@@ -19,6 +19,7 @@
 #include "wyres-generic/wutils.h"
 #include "wyres-generic/timemgr.h"
 #include "wyres-generic/rebootmgr.h"
+#include "wyres-generic/configmgr.h"
 #include "wyres-generic/movementmgr.h"
 #include "wyres-generic/sensormgr.h"
 
@@ -32,8 +33,10 @@
 // COntext data
 static struct appctx {
     uint8_t sentRebootInfo;
+    int32_t pressureOffsetPa;
 } _ctx = {
     .sentRebootInfo=NB_REBOOT_INFOS,
+    .pressureOffsetPa=0,
 };
 static void buttonChangeCB(void* ctx, SR_BUTTON_STATE_t currentState, SR_BUTTON_PRESS_TYPE_t currentPressType);
 
@@ -144,6 +147,8 @@ static bool getData(APP_CORE_UL_t* ul) {
     if (forceULData || SRMgr_hasPressureChanged()) {
         // get altimetre
         uint32_t vp = SRMgr_getPressurePa();
+        // apply offset
+        vp = vp + _ctx.pressureOffsetPa;
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_PRESSURE, sizeof(vp), &vp);
     }
     if (forceULData || SRMgr_hasTempChanged()) {
@@ -201,6 +206,26 @@ static APP_CORE_API_t _api = {
 };
 // Initialise module
 void mod_env_init(void) {
+    // Sensor initialisation
+    // TODO
+    // Altimeter offset calibration
+    // Read reference pressure (set by testbed production)
+    uint32_t pref = 0;
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_ENV_PRESSURE_REF, &pref, sizeof(pref));
+    // If not 0, calculate offset and write to config
+    if (pref!=0) {
+        // Get current pressure
+        uint32_t currp = SRMgr_getPressurePa();
+        // Calculate offset
+        _ctx.pressureOffsetPa = pref - currp;
+        CFMgr_setElement(CFG_UTIL_KEY_ENV_PRESSURE_OFFSET, &_ctx.pressureOffsetPa, sizeof(_ctx.pressureOffsetPa));
+        // reset reference to 0 (we only do the calibration offset calc immediately after testbed set it)
+        pref=0;
+        CFMgr_setElement(CFG_UTIL_KEY_ENV_PRESSURE_REF, &pref, sizeof(pref));
+    } else {
+        // get previously calculated calibration offset to use
+        CFMgr_getOrAddElement(CFG_UTIL_KEY_ENV_PRESSURE_OFFSET, &_ctx.pressureOffsetPa, sizeof(_ctx.pressureOffsetPa));
+    }
     // hook app-core for env data
     AppCore_registerModule(APP_MOD_ENV, &_api, EXEC_PARALLEL);
 
