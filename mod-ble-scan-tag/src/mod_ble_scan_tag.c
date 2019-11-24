@@ -25,14 +25,15 @@
 #include "app-core/app_msg.h"
 #include "mod-ble/mod_ble.h"
 
-#define MAX_BLE_ENTER MYNEWT_VAL(MOD_BLE_MAXIBS_TAG_ENTER)
-#define MAX_BLE_EXIT MYNEWT_VAL(MOD_BLE_MAXIBS_TAG_EXIT)
 #define MAX_BLE_TRACKED MYNEWT_VAL(MOD_BLE_MAXIBS_TAG_INZONE)
 
 #define BLE_NTYPES ((BLE_TYPE_COUNTABLE_END-BLE_TYPE_COUNTABLE_START)+1)
 // don't want these on the stack, and trying to avoid malloc
 static struct {
     void* wbleCtx;
+    uint8_t exitTimeoutMins;
+    uint8_t maxEnterPerUL;
+    uint8_t maxExitPerUL;
     struct {
         ibeacon_data_t ib;
         uint32_t lastSeenAt;
@@ -42,6 +43,9 @@ static struct {
 //    uint8_t cborbuf[MAX_BLE_ENTER*6];
 } _ctx = {
     .wbleCtx=NULL,
+    .exitTimeoutMins=5,
+    .maxEnterPerUL=10,
+    .maxExitPerUL=10,
 };
 
 static int findIB(uint16_t maj, uint16_t min) {
@@ -124,66 +128,73 @@ static bool getData(APP_CORE_UL_t* ul) {
     int nbEnter=0;
     int nbExit=0;
     int nbCount=0;
+    uint8_t bleErrorMask = 0;
     // No countables seen
     memset(_ctx.tcount, 0, BLE_NTYPES);
 
     uint32_t now = TMMgr_getTime();
     ibeacon_data_t* iblist = wble_getIBList(_ctx.wbleCtx, &nb);
-    // for each one in the new scan list, update the current list, flagging new ones
-    for(int i=0;i<nb;i++) {
-        uint8_t bletype = (iblist[i].major & 0xff00) >> 8;
-        if (bletype==BLE_TYPE_NAV) {
-            // ignore, shouldn't happen as the scanner was told to ignore these guys
-        } else if (bletype==BLE_TYPE_ENTEREXIT) {
-            // exit/enter long range type : if new, put as enter in the outgoing message, if not seen for last Xs, put in the exit list
-            int idx = findIB(iblist[i].major, iblist[i].minor);
-            if (idx<0) {
-                // insert
-                idx = findEmptyIB();
+    if (iblist!=NULL) {
+        // for each one in the new scan list, update the current list, flagging new ones
+        for(int i=0;i<nb;i++) {
+            uint8_t bletype = (iblist[i].major & 0xff00) >> 8;
+            if (bletype==BLE_TYPE_NAV) {
+                // ignore, shouldn't happen as the scanner was told to ignore these guys
+            } else if (bletype==BLE_TYPE_ENTEREXIT) {
+                // exit/enter type : if new, put as enter in the outgoing message, if not seen for last X minutes, put in the exit list
+                int idx = findIB(iblist[i].major, iblist[i].minor);
                 if (idx<0) {
-                    // poo
-                    log_debug("MBT: no space to add new tag");
+                    // insert
+                    idx = findEmptyIB();
+                    if (idx<0) {
+                        // poo
+                        log_debug("MBT: no space to add new tag");
+                        bleErrorMask|=0x01;
+                    } else {
+                        _ctx.iblist[idx].lastSeenAt = now;
+                        _ctx.iblist[idx].ib.major = iblist[i].major;
+                        _ctx.iblist[idx].ib.minor = iblist[i].minor;
+                        _ctx.iblist[idx].ib.rssi = iblist[i].rssi;
+                        _ctx.iblist[idx].ib.extra = iblist[i].extra;
+                        _ctx.iblist[idx].new = true;        // for UL
+                    }
                 } else {
+                    // update
                     _ctx.iblist[idx].lastSeenAt = now;
-                    _ctx.iblist[idx].ib.major = iblist[i].major;
-                    _ctx.iblist[idx].ib.minor = iblist[i].minor;
                     _ctx.iblist[idx].ib.rssi = iblist[i].rssi;
                     _ctx.iblist[idx].ib.extra = iblist[i].extra;
-                    _ctx.iblist[idx].new = true;        // for UL
                 }
-            } else {
-                // update
-                _ctx.iblist[idx].lastSeenAt = now;
-                _ctx.iblist[idx].ib.rssi = iblist[i].rssi;
-                _ctx.iblist[idx].ib.extra = iblist[i].extra;
+            } else if (bletype>=BLE_TYPE_COUNTABLE_START && bletype<=BLE_TYPE_COUNTABLE_END) {
+                // countable type : just inc its counter
+                int idx = (bletype - BLE_TYPE_COUNTABLE_START);
+                // dont wrap the counter. 255==too many to count...
+                if (_ctx.tcount[idx]<255) {
+                    _ctx.tcount[idx]++;
+                }
+                nbCount++;
             }
-        } else if (bletype>=BLE_TYPE_COUNTABLE_START && bletype<=BLE_TYPE_COUNTABLE_END) {
-            // countable type : just inc its counter
-            int idx = (bletype - BLE_TYPE_COUNTABLE_START);
-            // dont wrap the counter. 255==too many to count...
-            if (_ctx.tcount[idx]<255) {
-                _ctx.tcount[idx]++;
-            }
-            nbCount++;
         }
+    } else {
+        log_debug("MBT: BLE scan failed");
+        bleErrorMask|=0x02;
     }
     // find those who have not been seen for last X times, and remove them
     // Count them first to allocate space in UL
     for(int i=0;i<MAX_BLE_TRACKED;i++) {
         // lastSeenAt==0 -> unused entry
-        if ((_ctx.iblist[i].lastSeenAt>0) && (now-_ctx.iblist[i].lastSeenAt)>5*60*1000) {
+        if ((_ctx.iblist[i].lastSeenAt>0) && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60*1000)) {
             nbExit++;
         }
     }
-    if (nbExit>MAX_BLE_EXIT) {
-        nbExit = MAX_BLE_EXIT;
+    if (nbExit>_ctx.maxExitPerUL) {
+        nbExit = _ctx.maxExitPerUL;
     }
     if (nbExit>0) {
         uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_EXIT, nbExit*3);
         if (vp!=NULL) {
             int nbInMessage = 0;
             for(int i=0;i<MAX_BLE_TRACKED && nbInMessage<nbExit;i++) {
-                if ((_ctx.iblist[i].lastSeenAt>0) && (now-_ctx.iblist[i].lastSeenAt)>5*60*1000) {
+                if ((_ctx.iblist[i].lastSeenAt>0) && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60*1000)) {
                     // add maj/min to UL 
                     *vp++=(_ctx.iblist[i].ib.major & 0xFF);        // Just LSB of major
                     *vp++ = (_ctx.iblist[i].ib.minor & 0xff);
@@ -203,8 +214,8 @@ static bool getData(APP_CORE_UL_t* ul) {
         }
     }
 
-    if (nbEnter>MAX_BLE_ENTER) {
-        nbEnter = MAX_BLE_ENTER;
+    if (nbEnter>_ctx.maxEnterPerUL) {
+        nbEnter = _ctx.maxEnterPerUL;
     }
     if (nbEnter>0) {
         uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_ENTER, nbEnter*5);
@@ -269,8 +280,12 @@ static bool getData(APP_CORE_UL_t* ul) {
         }
     }
 */
-    log_info("MBT:UL enter %d exit %d count %d", nbEnter, nbExit, nbCount);
-    return (nbEnter>0 || nbExit>0 || nbCount>0);
+    // If error like tracking list is full and we failed to see a enter/exit guy, flag it up...
+    if (bleErrorMask!=0) {
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_ERRORMASK, 1, &bleErrorMask);
+    }
+    log_info("MBT:UL enter %d exit %d types %d, err %02x", nbEnter, nbExit, nbCount, bleErrorMask);
+    return (nbEnter>0 || nbExit>0 || nbCount>0 || bleErrorMask!=0);
 }
 
 static APP_CORE_API_t _api = {
@@ -285,6 +300,13 @@ static APP_CORE_API_t _api = {
 void mod_ble_scan_tag_init(void) {
     // initialise access (this is resistant to multiple calls...)
     _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
+
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_EXIT_TIMEOUT_MINS, &_ctx.exitTimeoutMins, sizeof(uint8_t));
+    if (_ctx.exitTimeoutMins==0) {
+        _ctx.exitTimeoutMins= 1;
+    }
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_MAX_ENTER_PER_UL, &_ctx.maxEnterPerUL, sizeof(uint8_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_MAX_EXIT_PER_UL, &_ctx.maxExitPerUL, sizeof(uint8_t));
 
     // hook app-core for ble scan - serialised as competing for UART
     AppCore_registerModule(APP_MOD_BLE_SCAN_TAGS, &_api, EXEC_SERIAL);

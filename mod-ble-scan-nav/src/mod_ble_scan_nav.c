@@ -27,9 +27,11 @@
 #define MAX_BLE_CURR MYNEWT_VAL(MOD_BLE_MAXIBS_NAV)
 static struct {
     void* wbleCtx;
+    uint8_t maxNavPerUL;
     ibeacon_data_t iblist[MAX_BLE_CURR];
 } _ctx = {
     .wbleCtx=NULL,
+    .maxNavPerUL = MAX_BLE_CURR,
 };
 
 /** callback fns from BLE generic package */
@@ -89,6 +91,9 @@ static bool getData(APP_CORE_UL_t* ul) {
     // Get list of ibs in order into this array please
     int nbSent = wble_getSortedIBList(_ctx.wbleCtx, MAX_BLE_CURR, _ctx.iblist);
     if (nbSent>0) {
+        if (nbSent>_ctx.maxNavPerUL) {
+            nbSent = _ctx.maxNavPerUL;      // can limit to less than the max
+        }
         // put it into UL if possible
         uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_CURR,nbSent*5);
         if (vp!=NULL) {
@@ -119,6 +124,14 @@ static APP_CORE_API_t _api = {
 void mod_ble_scan_nav_init(void) {
     // initialise access
     _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
+
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_MAX_NAV_PER_UL, &_ctx.maxNavPerUL, sizeof(uint8_t));
+    // Validate value is ok to avoid issues...
+    if (_ctx.maxNavPerUL==0) {
+        _ctx.maxNavPerUL= 1;        // No point in enabling the module if not gonna send at least 1!
+    } else if (_ctx.maxNavPerUL>MAX_BLE_CURR) {
+        _ctx.maxNavPerUL= MAX_BLE_CURR;
+    }
 
     // hook app-core for ble scan - serialised as competing for UART
     AppCore_registerModule(APP_MOD_BLE_SCAN_NAV, &_api, EXEC_SERIAL);
