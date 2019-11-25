@@ -116,12 +116,27 @@ See app_core.h for the list. Some key ones:
 | APP_CORE | 0405 | - | Maximal time between uplink in minutes |
 | APP_CORE | 0406 | - | Downlink id (dlid) |
 | APP_CORE | 0407 | - | idle period check time (in seconds, 60s default) |
+| APP_CORE | 0408 | - | Stock mode |
+| APP_CORE | 0409 | - | Join timeout (in seconds) |
+| APP_CORE | 0410 | - | Join retry interval (in seconds) |
+| APP_CORE | 0411 | - | Firmware infos |
 | APP_MOD | 0501 | - | BLE scan duration un ms |
 | APP_MOD | 0502 | - | GPS cold time in seconds |
 | APP_MOD | 0503 | - | GPS warm time in seconds |
 | APP_MOD | 0504 | - | GPS power mode |
 | APP_MOD | 0505 | - | GPS fix mode |
 
+| APP_MOD | 0510 | - | Max navigation BLE per uplink |
+| APP_MOD | 0511 | - | Ble EXIT timeout (in minuts) |
+| APP_MOD | 0512 | - | Max enter per uplink |
+| APP_MOD | 0513 | - | Max exit per uplink |
+| APP_MOD | 0516 | - | iBeacon UUID |
+| APP_MOD | 0517 | - | iBeacon major |
+| APP_MOD | 0518 | - | iBeacon minor |
+| APP_MOD | 0519 | - | iBeacon period (in milisecond) |
+| APP_MOD | 0520 | - | iBeacon txPower |
+| APP_MOD | 0532 | - | Pressure reference |
+| APP_MOD | 0533 | - | Pressure offset |
 
 DL Action handling
 ------------------
