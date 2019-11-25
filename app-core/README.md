@@ -125,7 +125,6 @@ See app_core.h for the list. Some key ones:
 | APP_MOD | 0503 | - | GPS warm time in seconds |
 | APP_MOD | 0504 | - | GPS power mode |
 | APP_MOD | 0505 | - | GPS fix mode |
-
 | APP_MOD | 0510 | - | Max navigation BLE per uplink |
 | APP_MOD | 0511 | - | Ble EXIT timeout (in minuts) |
 | APP_MOD | 0512 | - | Max enter per uplink |
