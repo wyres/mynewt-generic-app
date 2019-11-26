@@ -133,7 +133,8 @@ static ATRESULT atcmd_setcfg(uint8_t nargs, char* argv[]) {
         int l = CFMgr_getElementLen(k);
         switch(l) {
             case 0: {
-                wconsole_println("bad key[%04x]");
+                wconsole_println("Key[%04x] does not exist");
+                // TODO ? create in this case? maybe if a -c arg at the end? maybe not useful?
                 break;
             }
             case 1: 
@@ -155,7 +156,6 @@ static ATRESULT atcmd_setcfg(uint8_t nargs, char* argv[]) {
                 }
                 CFMgr_setElement(k, &v, l);
                 printKey(k);        // Show the value now in the config 
-//                wconsole_println("Key[%04x]=%d",k,v);
                 break;
             }
 
@@ -178,7 +178,10 @@ static ATRESULT atcmd_setcfg(uint8_t nargs, char* argv[]) {
                 // gonna allow up to 16 bytes
                 uint8_t val[16];
                 for(int i=0;i<l;i++) {
-                    sscanf(vp, "%02x", (unsigned int*)(&val[i]));
+                    // sscanf into int (4 bytes) then copy just LSB as value for each byte
+                    unsigned int b=0;
+                    sscanf(vp, "%02x", &b);
+                    val[i] = b;
                     vp+=2;
                 }
                 CFMgr_setElement(k, &val[0], l);
