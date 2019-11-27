@@ -100,9 +100,9 @@ See app_core.h for the list. Some key ones:
 | LORA | 0107 | - | ADR enabled |
 | LORA | 0108 | - | Acknoledgement |
 | LORA | 0109 | - | data rate |
-| LORA | 0110 | - | tx power |
-| LORA | 0111 | - | port for TX |
-| LORA | 0112 | - | port for RX |
+| LORA | 010A | - | tx power |
+| LORA | 010B | - | port for TX |
+| LORA | 010C | - | port for RX |
 | APP | 0201 | - | CFG_UTIL_KEY_CHECKINTERVAL repos\generic\generic\include\wyres-generic\appConfigKeys.h  used ? |
 | WYRES | 0301 | - | CFG_WYRES_KEY_TAG_SYNC_DM_INTERVAL  used ? |
 | WYRES | 0302 | - | CFG_WYRES_KEY_LORA_TXPOWER  used ? |
@@ -118,24 +118,24 @@ See app_core.h for the list. Some key ones:
 | APP_CORE | 0407 | - | idle period check time (in seconds, 60s default) |
 | APP_CORE | 0408 | - | Stock mode |
 | APP_CORE | 0409 | - | Join timeout (in seconds) |
-| APP_CORE | 0410 | - | Join retry interval (in seconds) |
-| APP_CORE | 0411 | - | Firmware infos |
+| APP_CORE | 040A | - | Join retry interval (in minutes) |
+| APP_CORE | 040B | - | Firmware infos |
 | APP_MOD | 0501 | - | BLE scan duration un ms |
 | APP_MOD | 0502 | - | GPS cold time in seconds |
 | APP_MOD | 0503 | - | GPS warm time in seconds |
 | APP_MOD | 0504 | - | GPS power mode |
 | APP_MOD | 0505 | - | GPS fix mode |
-| APP_MOD | 0510 | - | Max navigation BLE per uplink |
-| APP_MOD | 0511 | - | Ble EXIT timeout (in minuts) |
-| APP_MOD | 0512 | - | Max enter per uplink |
-| APP_MOD | 0513 | - | Max exit per uplink |
-| APP_MOD | 0516 | - | iBeacon UUID |
-| APP_MOD | 0517 | - | iBeacon major |
-| APP_MOD | 0518 | - | iBeacon minor |
-| APP_MOD | 0519 | - | iBeacon period (in milisecond) |
-| APP_MOD | 0520 | - | iBeacon txPower |
-| APP_MOD | 0532 | - | Pressure reference |
-| APP_MOD | 0533 | - | Pressure offset |
+| APP_MOD | 050A | - | Max navigation BLE per uplink |
+| APP_MOD | 050B | - | Ble EXIT timeout (in minuts) |
+| APP_MOD | 050C | - | Max enter per uplink |
+| APP_MOD | 050D | - | Max exit per uplink |
+| APP_MOD | 0510 | - | iBeacon UUID |
+| APP_MOD | 0511 | - | iBeacon major |
+| APP_MOD | 0512 | - | iBeacon minor |
+| APP_MOD | 0513 | - | iBeacon period (in milisecond) |
+| APP_MOD | 0514 | - | iBeacon txPower |
+| APP_MOD | 0520 | - | Pressure reference |
+| APP_MOD | 0521 | - | Pressure offset |
 
 DL Action handling
 ------------------
@@ -143,9 +143,10 @@ App-core handles the reception and decoding of the DL packets. These consist of 
 Most of the core actions are handled by the app_core.c file, including reset, get/setcfg and setting UTCTime.
 
 
-mods :
+modules :
+------------------
 
-| module | ID | 
+| KEY | ID |
 | --------: | :--------: |
 | APP_MOD_ENV | 0 |
 | APP_MOD_GPS | 1 |
@@ -154,3 +155,48 @@ mods :
 | APP_MOD_BLE_IB | 4 |
 | APP_MOD_IO | 5 |
 | APP_MOD_PTI | 6 |
+
+
+UL keys :
+-------------------
+
+| KEY | ID (decimal) | Description |
+| --------: | :--------: | :--------: |
+| APP_CORE_UL_VERSION | 0 | |
+| APP_CORE_UL_UPTIME | 1 | |
+| APP_CORE_UL_CONFIG | 2 | |
+| APP_CORE_UL_ENV_TEMP | 3 | |
+| APP_CORE_UL_ENV_PRESSURE | 4 | |
+| APP_CORE_UL_ENV_HUMIDIT | 5 | |
+| APP_CORE_UL_ENV_LIGHT | 6 | |
+| APP_CORE_UL_ENV_BATTERY | 7 | |
+| APP_CORE_UL_ENV_ADC1 | 8 | |
+| APP_CORE_UL_ENV_ADC2 | 9 | |
+| APP_CORE_UL_ENV_NOISE | 10 | |
+| APP_CORE_UL_ENV_BUTTON | 11 | |
+| APP_CORE_UL_ENV_MOVE | 12 | |
+| APP_CORE_UL_ENV_FALL | 13 | |
+| APP_CORE_UL_ENV_SHOCK | 14 | |
+| APP_CORE_UL_ENV_ORIENT | 15 | |
+| APP_CORE_UL_ENV_REBOOT | 16 | |
+| APP_CORE_UL_ENV_LASTASSERT | 17 | |
+| APP_CORE_UL_BLE_CURR | 18 | |
+| APP_CORE_UL_BLE_ENTER | 19 | |
+| APP_CORE_UL_BLE_EXIT | 20 | |
+| APP_CORE_UL_BLE_COUNT | 21 | |
+| APP_CORE_UL_GPS | 22 | |
+| APP_CORE_UL_BLE_ERRORMASK | 23 | |
+
+DL keys : 
+-------------------------
+| KEY | ID (decimal) | Description |
+| --------: | :--------: | :--------: |
+| APP_CORE_DL_REBOOT | 1 | - |
+| APP_CORE_DL_SET_CONFIG | 2 | - |
+| APP_CORE_DL_GET_CONFIG | 3 | - |
+| APP_CORE_DL_FLASH_LED1 | 5 | - |
+| APP_CORE_DL_FLASH_LED2 | 6 | - |
+| APP_CORE_DL_SET_UTCTIME | 24 | - |
+| APP_CORE_DL_FOTA | 25 | - |
+| APP_CORE_DL_GET_MODS |26 | - |
+| APP_CORE_DL_FIX_GPS | 11 | - |
