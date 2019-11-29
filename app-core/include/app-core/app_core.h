@@ -39,13 +39,14 @@ typedef struct {
     APP_MOD_TIC_FN_t ticCB;                 // may be NULL if no ops to do
 } APP_CORE_API_t;
 // Info about this build
-#define MAXFWSTRING 31
+#define MAXFWNAME 39
+#define MAXFWDATE 23
 typedef struct {
     uint32_t fwmaj;
     uint32_t fwmin;
     uint32_t fwbuild;
-    char fwdate[MAXFWSTRING+1];
-    char fwname[MAXFWSTRING+1];
+    char fwdate[MAXFWDATE+1];
+    char fwname[MAXFWNAME+1];
     uint32_t loraregion;         // as this is a build option
 } APP_CORE_FW_t;
 

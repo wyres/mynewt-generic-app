@@ -782,8 +782,8 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const
     _ctx.fw.fwmaj = fwmaj;
     _ctx.fw.fwmin = fwmin;
     _ctx.fw.fwbuild = fwbuild;
-    strncpy(_ctx.fw.fwdate,fwdate, MAXFWSTRING);
-    strncpy(_ctx.fw.fwname, fwname, MAXFWSTRING);
+    strncpy(_ctx.fw.fwdate,fwdate, MAXFWDATE);
+    strncpy(_ctx.fw.fwname, fwname, MAXFWNAME);
 
     // Get the app core config
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMovingSecs, sizeof(uint32_t));
