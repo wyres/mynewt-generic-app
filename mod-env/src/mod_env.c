@@ -209,7 +209,7 @@ void mod_env_init(void) {
     // Sensor initialisation
     // TODO
     // Altimeter offset calibration
-    // Read reference pressure (set by testbed production)
+    // Read reference pressure (set by testbed production) in PASCAL
     uint32_t pref = 0;
     CFMgr_getOrAddElement(CFG_UTIL_KEY_ENV_PRESSURE_REF, &pref, sizeof(pref));
     // If not 0, calculate offset and write to config
