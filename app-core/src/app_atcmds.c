@@ -299,6 +299,7 @@ static ATRESULT atcmd_info(uint8_t nargs, char* argv[]) {
     wconsole_println("Logs: %s", get_log_level_str());
     wconsole_println("LastReset: %04x", RMMgr_getResetReasonCode());
     wconsole_println("LastAssert:[0x%08x]", RMMgr_getLastAssertCallerFn());
+    wconsole_println("LastWELog:[0x%08x]", RMMgr_getLogFn(0));
     return ATCMD_OK;
 }
 static ATCMD_DEF_t ATCMDS[] = {

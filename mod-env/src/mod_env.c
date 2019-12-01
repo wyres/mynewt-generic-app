@@ -28,7 +28,9 @@
 #include "mod-env/mod_env.h"
 
 // may wish to may configurable?
-#define NB_REBOOT_INFOS (4)
+// Send debug data at startup twice
+#define NB_REBOOT_INFOS (2)
+// Force uplink with env data every hour?
 #define FORCE_UL_INTERVAL_MS (60*60*1000)
 // COntext data
 static struct appctx {
@@ -39,6 +41,7 @@ static struct appctx {
     .pressureOffsetPa=0,
 };
 static void buttonChangeCB(void* ctx, SR_BUTTON_STATE_t currentState, SR_BUTTON_PRESS_TYPE_t currentPressType);
+static void A_getdebug(uint8_t* v, uint8_t l);
 
 // My api functions
 static uint32_t start() {
@@ -77,6 +80,9 @@ static bool getData(APP_CORE_UL_t* ul) {
         // last asset reason
         void* la = RMMgr_getLastAssertCallerFn();
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_LASTASSERT, sizeof(la), &la);
+        // fn log list : only return the most recent one
+        void* lf = RMMgr_getLogFn(0);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_LASTLOGCALLER, sizeof(lf), &lf);
         // firmware version, build date
         APP_CORE_FW_t* fw = AppCore_getFwInfo();
         // Only sending up the minimum
@@ -90,6 +96,7 @@ static bool getData(APP_CORE_UL_t* ul) {
             .build = (uint8_t)(fw->fwbuild),
         };
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_VERSION, sizeof(fwdata), &fwdata);
+        forceULData = true;     // as we sent debug
     }
     // get accelero if changed since last UL
     if (MMMgr_getLastMovedTime() >= AppCore_lastULTime()) {
@@ -228,6 +235,8 @@ void mod_env_init(void) {
     }
     // hook app-core for env data
     AppCore_registerModule(APP_MOD_ENV, &_api, EXEC_PARALLEL);
+    // an action
+    AppCore_registerAction(APP_CORE_DL_GET_DEBUG, &A_getdebug);
 
     // add cb for button press, no context required
     SRMgr_registerButtonCB(buttonChangeCB, NULL);
@@ -247,4 +256,9 @@ static void buttonChangeCB(void* ctx, SR_BUTTON_STATE_t currentState, SR_BUTTON_
     } else {
         log_noout("ME:button pressed");
     }
+}
+// Get debug data in next UL
+static void A_getdebug(uint8_t* v, uint8_t l) {
+    log_info("AC:action GETDEBUG");    
+    _ctx.sentRebootInfo=1;      // so it gets sent in next UL one time
 }

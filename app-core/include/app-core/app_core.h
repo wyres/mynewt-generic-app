@@ -84,15 +84,16 @@ typedef enum { APP_CORE_UL_VERSION=0, APP_CORE_UL_UPTIME=1, APP_CORE_UL_CONFIG=2
     APP_CORE_UL_ENV_REBOOT=16, APP_CORE_UL_ENV_LASTASSERT=17,
     APP_CORE_UL_BLE_CURR=18, APP_CORE_UL_BLE_ENTER=19, APP_CORE_UL_BLE_EXIT=20, APP_CORE_UL_BLE_COUNT=21,
     APP_CORE_UL_GPS=22, 
-    APP_CORE_UL_BLE_ERRORMASK=23
+    APP_CORE_UL_BLE_ERRORMASK=23, APP_CORE_UL_ENV_LASTLOGCALLER=24
 } APP_CORE_UL_TAGS;
 // app core TLV tags for DL : 1 byte sized, never change already allocated values! Note some are historic values see WyresDeviceActions.java
 // App core has handlers for up to GET_MODS
 // ensure that the following define is > number of actions or you will get assert() at bootup if all the actions get claimed
-#define MAX_DL_ACTIONS  (10)
+#define MAX_DL_ACTIONS  (12)
 typedef enum { APP_CORE_DL_REBOOT=1, APP_CORE_DL_SET_CONFIG=2, APP_CORE_DL_GET_CONFIG=3, 
     APP_CORE_DL_FLASH_LED1=5, APP_CORE_DL_FLASH_LED2=6,        
-    APP_CORE_DL_SET_UTCTIME=24, APP_CORE_DL_FOTA=25, APP_CORE_DL_GET_MODS=26, APP_CORE_DL_FIX_GPS=11
+    APP_CORE_DL_SET_UTCTIME=24, APP_CORE_DL_FOTA=25, APP_CORE_DL_GET_MODS=26, APP_CORE_DL_FIX_GPS=11,
+    APP_CORE_DL_GET_DEBUG=27
 } APP_CORE_DL_TAGS;
 
 

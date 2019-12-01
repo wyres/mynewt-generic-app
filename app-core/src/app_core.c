@@ -304,7 +304,7 @@ static SM_STATE_ID_t State_TryJoin(void* arg, int e, void* data) {
         }
 
         case ME_LORA_JOIN_OK: {
-            log_debug("AC:join ok");
+            log_info("AC:join ok");
             // Update to say we are not in stock mode
             ctx->stockMode = 1;
             CFMgr_setElement(CFG_UTIL_KEY_STOCK_MODE, &ctx->stockMode, 1);
@@ -314,10 +314,10 @@ static SM_STATE_ID_t State_TryJoin(void* arg, int e, void* data) {
         case ME_LORA_JOIN_FAIL: {
             // For stock mode, check if we ever managed to join (which sets stock mode to false)
             if (ctx->stockMode==0) {
-                log_debug("AC:join fail and never joined, going stock mode");
+                log_warn("AC:join fail and never joined, going stock mode");
                 return MS_STOCK;
             }
-            log_debug("AC:join fail wait to retry");
+            log_warn("AC:join fail wait to retry");
             return MS_WAIT_JOIN_RETRY;
         }
         default: {
@@ -1058,9 +1058,9 @@ static void A_settime(uint8_t* v, uint8_t l) {
     // boot time in UTC is now - time elapsed since boot
     TMMgr_setBootTime(now - TMMgr_getRelTime());
 }
-
+// Return state of modules?
 static void A_getmods(uint8_t* v, uint8_t l) {
-    log_info("AC:action FOTA (TBI)");    
+    log_info("AC:action GETMODS (TBI)");    
 }
 
 static void registerActions() {
