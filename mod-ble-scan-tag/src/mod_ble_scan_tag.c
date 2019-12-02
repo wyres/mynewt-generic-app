@@ -190,6 +190,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         nbExit = _ctx.maxExitPerUL;
     }
     if (nbExit>0) {
+        // TODO deal with case where nbExit is too big for 1 UL and needs split across multiple
         uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_EXIT, nbExit*3);
         if (vp!=NULL) {
             int nbInMessage = 0;
@@ -218,6 +219,8 @@ static bool getData(APP_CORE_UL_t* ul) {
         nbEnter = _ctx.maxEnterPerUL;
     }
     if (nbEnter>0) {
+        // TODO deal with case where nbEnter is too big for 1 UL and needs split across multiple
+        int nbInThisUL = app_core_msg_uL_getSpace()/5;
         uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_ENTER, nbEnter*5);
         if (vp!=NULL) {
             int nbInMessage = 0;
@@ -236,17 +239,24 @@ static bool getData(APP_CORE_UL_t* ul) {
         }
     }
     // put in types and counts
+    int nCounts=0;
     for(int i=0;i<BLE_NTYPES;i++) {
         if (_ctx.tcount[i]>0) {
-            uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_COUNT, 2);
-            if (vp!=NULL) {
+            nCounts++;
+        }
+    }
+    // TODO deal with case where nCounts is too big for 1 UL and needs split across multiple
+    uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_COUNT, 2*nCounts);
+    if (vp!=NULL) {
+        for(int i=0;i<BLE_NTYPES;i++) {
+            if (_ctx.tcount[i]>0) {
                 *vp++=(BLE_TYPE_COUNTABLE_START+i);
                 *vp++=_ctx.tcount[i];
                 log_debug("MBT: countable tags type %d saw %d", BLE_TYPE_COUNTABLE_START+i, _ctx.tcount[i]);
-            } else {
-                log_debug("MBT: no room in UL for countable tags type %d", BLE_TYPE_COUNTABLE_START+i);
             }
         }
+    } else {
+        log_debug("MBT: no room in UL for %d countable tags ", nCounts);
     }
 
 /*    if (nbSent>0) {
