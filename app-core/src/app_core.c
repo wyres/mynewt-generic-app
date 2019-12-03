@@ -67,6 +67,8 @@ static struct appctx {
     uint8_t stockMode;
     uint32_t joinTimeCheckSecs;
     uint32_t rejoinWaitMins;
+    uint32_t rejoinWaitSecs;
+    uint8_t nbJoinAttempts;
     uint8_t nActions;
     ACTION_t actions[MAX_DL_ACTIONS];
     // ul response id : holds the last DL id we received. Sent in each UL to inform backend we got its DLs. 0=not listening
@@ -93,7 +95,9 @@ static struct appctx {
     .idleTimeNotMovingMins=120,      // 2 hours
     .idleTimeCheckSecs=60,   
     .joinTimeCheckSecs=60,          // timeout on join attempt   
-    .rejoinWaitMins=120,           // 2 hours for rejoin tries  
+    .rejoinWaitMins=120,           // 2 hours for rejoin tries between the try blocks
+    .rejoinWaitSecs=60,           // 60s default for rejoin tries in the 'try X times' (ok for SF10 duty cycle?)
+    .nbJoinAttempts=0,
     .stockMode=0,                   // in stock mode by default until a rejoin works 
     .modSetupTimeSecs=3,
     .maxTimeBetweenULMins=120,    // 2 hours
@@ -107,7 +111,7 @@ static struct appctx {
         .loraSF=LORAWAN_SF10,      
         .txPower=14,
        .txTimeoutMs=10000,
-      .appeui = {0x38,0xE8,0xEB,0xE0, 0x00, 0x00, 0x00, 0x00},
+      .appeui = {0x38,0xB8,0xEB,0xE0, 0x00, 0x00, 0x00, 0x00},
       // note devEUI/appKey cannot have valid defaults as are specific to every device so are fixed at all 0
       // These should be set either via AT command or initial factory PROM programming. 
       .deveui = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
@@ -130,7 +134,8 @@ static void configChangedCB(uint16_t key) {
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MODSETUP_TIME_SECS, &_ctx.modSetupTimeSecs, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MAXTIME_UL_MINS, &_ctx.maxTimeBetweenULMins, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_JOIN_TIMEOUT_SECS, &_ctx.joinTimeCheckSecs, sizeof(uint32_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_RETRY_JOIN_TIME_SECS, &_ctx.rejoinWaitMins, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_RETRY_JOIN_TIME_MINS, &_ctx.rejoinWaitMins, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_RETRY_JOIN_TIME_SECS, &_ctx.rejoinWaitSecs, sizeof(uint32_t));
 
 }
 static bool isModActive(uint8_t* mask, APP_MOD_ID_t id) {
@@ -268,11 +273,6 @@ static SM_STATE_ID_t State_TryJoin(void* arg, int e, void* data) {
                 log_error("AC: should have rebooted!");
                 assert(0);
             }
-            // Start the join timeout (shouldnt need it...) 
-            sm_timer_start(ctx->mySMId, ctx->joinTimeCheckSecs*1000);
-            log_debug("AC:try join : timeout in %d secs", ctx->joinTimeCheckSecs);
-            // Record time
-            ctx->joinStartTS = TMMgr_getRelTime();
             // Stop all leds, and flash fast both to show we're trying join
             ledStart(MYNEWT_VAL(MODS_ACTIVE_LED), FLASH_5HZ, -1);
             ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_5HZ, -1);
@@ -281,11 +281,19 @@ static SM_STATE_ID_t State_TryJoin(void* arg, int e, void* data) {
             // start join process
             LORAWAN_RESULT_t status = lora_api_join(lora_join_cb, LORAWAN_SF10, NULL);
             if (status==LORAWAN_RES_JOIN_OK) {
-                // already joined (?)
+                // already joined (?) seems unlikely so warn about it
+                log_warn("AC:try join : already joined?!?");
                 sm_sendEvent(ctx->mySMId, ME_LORA_JOIN_OK, NULL);
             } else if (status!=LORAWAN_RES_OK) {
                 // Failed to start join process... this isn't great
+                log_warn("AC:try join : tx attempt failed immediately (%d)", status);
                 sm_sendEvent(ctx->mySMId, ME_LORA_JOIN_FAIL, NULL);
+            } else {
+                // Start the join timeout (shouldnt need it...) 
+                sm_timer_start(ctx->mySMId, ctx->joinTimeCheckSecs*1000);
+                log_debug("AC:try join : timeout in %d secs", ctx->joinTimeCheckSecs);
+                // Record time
+                ctx->joinStartTS = TMMgr_getRelTime();
             }
             return SM_STATE_CURRENT;
         }
@@ -299,6 +307,7 @@ static SM_STATE_ID_t State_TryJoin(void* arg, int e, void* data) {
         }
         case SM_TIMEOUT: {
             // this means join failed (and badly as stack didnt tell us)
+            log_warn("AC:tj: fail as sm timeout??");
             sm_sendEvent(ctx->mySMId, ME_LORA_JOIN_FAIL, NULL);
             return SM_STATE_CURRENT;
         }
@@ -372,8 +381,19 @@ static SM_STATE_ID_t State_WaitJoinRetry(void* arg, int e, void* data) {
                 assert(0);
             }
             // Start the retry join timeout  
-            sm_timer_start(ctx->mySMId, ctx->rejoinWaitMins*60000);
-            log_debug("AC:wjr : retry %d mins", ctx->rejoinWaitMins);
+            ctx->nbJoinAttempts++;
+            // We are allowing up to X tries with just Y second intervals, after which we go to a longer timeout of Z mins
+            uint8_t maxrapid = 3;       // Default of 3 goes before sleeping a long time
+            CFMgr_getOrAddElement(CFG_UTIL_KEY_MAX_RAPID_JOIN_ATTEMPTS, &maxrapid, 1);
+            if (ctx->nbJoinAttempts < maxrapid) {
+                // try again in short time
+                sm_timer_start(ctx->mySMId, ctx->rejoinWaitSecs*1000);
+                log_debug("AC:wjr : retry %d secs", ctx->rejoinWaitSecs);
+            } else {
+                sm_timer_start(ctx->mySMId, ctx->rejoinWaitMins*60000);
+                log_debug("AC:wjr : retry %d mins", ctx->rejoinWaitMins);
+                ctx->nbJoinAttempts = 0;        // as we're in the long timeout, reset count for next time
+            }
             // LEDs off
             ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
             ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
@@ -795,7 +815,8 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_MINS, &_ctx.idleTimeNotMovingMins, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_CHECK_SECS, &_ctx.idleTimeCheckSecs, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_JOIN_TIMEOUT_SECS, &_ctx.joinTimeCheckSecs, sizeof(uint32_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_RETRY_JOIN_TIME_SECS, &_ctx.rejoinWaitMins, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_RETRY_JOIN_TIME_MINS, &_ctx.rejoinWaitMins, sizeof(uint32_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_RETRY_JOIN_TIME_SECS, &_ctx.rejoinWaitSecs, sizeof(uint32_t));
     memset(&_ctx.modsMask[0], 0xff, MOD_MASK_SZ);       // Default every module is active
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MODS_ACTIVE_MASK, &_ctx.modsMask[0], MOD_MASK_SZ);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MAXTIME_UL_MINS, &_ctx.maxTimeBetweenULMins, sizeof(uint32_t));
