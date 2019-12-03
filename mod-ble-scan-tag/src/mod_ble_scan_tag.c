@@ -238,22 +238,27 @@ static bool getData(APP_CORE_UL_t* ul) {
             }
         }
     }
+    // Count number of types with non-zero counts
+    int nbTypes = 0;
+    for(int i=0;(i<BLE_NTYPES);i++) {
+        if (_ctx.tcount[i]>0) {
+            nbTypes++;
+        }
+    }
     // put in types and counts
-    if (nbCount>0) {
-        // TODO deal with case where nCounts is too big for 1 UL and needs split across multiple
-        int nbCountInUL = 0;
-        uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_COUNT, 2*nbCount);
+    if (nbTypes>0) {
+        // TODO deal with case where nbTypes is too big for 1 UL and needs split across multiple
+        uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_COUNT, 2*nbTypes);
         if (vp!=NULL) {
-            for(int i=0;(i<BLE_NTYPES) && (nbCountInUL<=nbCount);i++) {
+            for(int i=0;(i<BLE_NTYPES);i++) {
                 if (_ctx.tcount[i]>0) {
                     *vp++=(BLE_TYPE_COUNTABLE_START+i);
                     *vp++=_ctx.tcount[i];
-                    nbCountInUL++;
                     log_debug("MBT: countable tags type %d saw %d", BLE_TYPE_COUNTABLE_START+i, _ctx.tcount[i]);
                 }
             }
         } else {
-            log_debug("MBT: no room in UL for %d countable tags ", nbCount);
+            log_debug("MBT: no room in UL for %d countable tag types ", nbTypes);
         }
     } else {
         log_debug("MBT: no countable tags seen");
