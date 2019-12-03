@@ -29,7 +29,7 @@ void app_core_init(void) {
     // initialise devices that are common
     res=uart_line_comm_create(UART0_DEV, 19200);        // specific users of the uart will change the baud rate as required
     assert(res);
-
+    
     log_info("app init - reset %04x, last assert at [0x%08x]", 
         RMMgr_getResetReasonCode(), 
         RMMgr_getLastAssertCallerFn());

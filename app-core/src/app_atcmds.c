@@ -291,7 +291,7 @@ static ATRESULT atcmd_info(uint8_t nargs, char* argv[]) {
     // Display fw info, lora state, battery, last reboot reason, last assert etc etc
     APP_CORE_FW_t* fwinfo = AppCore_getFwInfo();
     wconsole_println("FW:%s, v%d/%d.%d @%s", fwinfo->fwname, fwinfo->fwmaj, fwinfo->fwmin, fwinfo->fwbuild, fwinfo->fwdate);
-    int hwrev = MYNEWT_VAL(BSP_HW_REV);
+    int hwrev = BSP_getHwVer();
     wconsole_println("HW:rev%c",hwrev==1?'B':(hwrev==2?'C':(hwrev==3?'D':'?')));
     wconsole_println("Lora:Region %d Joined:%s", fwinfo->loraregion, lora_api_isJoined()?"YES":"NO");
     wconsole_println("Batt:%d", SRMgr_getBatterymV());

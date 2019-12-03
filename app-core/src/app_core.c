@@ -785,6 +785,11 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const
     strncpy(_ctx.fw.fwdate,fwdate, MAXFWDATE);
     strncpy(_ctx.fw.fwname, fwname, MAXFWNAME);
 
+    // set the hardware base card version from the config to the BSP 
+    uint8_t hwrev = BSP_getHwVer();
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_HW_BASE_REV, &hwrev, sizeof(uint8_t));
+    BSP_setHwVer(hwrev);
+
     // Get the app core config
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMovingSecs, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_MINS, &_ctx.idleTimeNotMovingMins, sizeof(uint32_t));
