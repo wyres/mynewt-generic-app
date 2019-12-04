@@ -27,9 +27,8 @@ pkg.keywords:
 pkg.deps:
     - "@apache-mynewt-core/kernel/os"
     - "@apache-mynewt-core/hw/hal"
-#    - "@lorawan/lorawan_api"
-#    - "@lorawan/lorawan_wrapper"
     - "@generic/generic"
+    - "@generic/loraapi"
     - "@generic/loraapi_KLK"
 # note: app level init is 990, module init functions should be called at 995 (in their respective pkg.ymls) 
 pkg.init:
