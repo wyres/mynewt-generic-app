@@ -105,11 +105,11 @@ static struct appctx {
     .lastDLId=0,            // default when new, will be read from the config mgr
     .loraCfg = {
         .useAck = false,
-        .useAdr = false,
-        .txPort=3,
-        .rxPort=3,
-        .loraSF=LORAWAN_SF10,      
-        .txPower=14,
+        .useAdr = MYNEWT_VAL(LORA_DEFAULT_ADR),     // Allow default to be a build option
+        .txPort = 3,
+        .rxPort = 3,
+        .loraSF = LORAWAN_SF10,      
+        .txPower= 14,
        .txTimeoutMs=10000,
       .appeui = {0x38,0xB8,0xEB,0xE0, 0x00, 0x00, 0x00, 0x00},
       // note devEUI/appKey cannot have valid defaults as are specific to every device so are fixed at all 0
@@ -173,9 +173,11 @@ static void lora_tx_cb(void* userctx, LORAWAN_RESULT_t res) {
         case LORAWAN_RES_DUTYCYCLE:
         case LORAWAN_RES_OCC:
         case LORAWAN_RES_NO_BW:
+        case LORAWAN_RES_TIMEOUT:       // what does this imply?
             ourres = LORA_TX_ERR_RETRY;
             break;
         default:
+            log_error("AC:LW tx says error %d -> fatal", res);
             ourres = LORA_TX_ERR_FATAL;
             break;
     }
@@ -279,7 +281,7 @@ static SM_STATE_ID_t State_TryJoin(void* arg, int e, void* data) {
             // Set desired low power mode to be just sleep as console is active for first period
             LPMgr_setLPMode(ctx->lpUserId, LP_SLEEP);
             // start join process
-            LORAWAN_RESULT_t status = lora_api_join(lora_join_cb, LORAWAN_SF10, NULL);
+            LORAWAN_RESULT_t status = lora_api_join(lora_join_cb, ctx->loraCfg.loraSF, NULL);
             if (status==LORAWAN_RES_JOIN_OK) {
                 // already joined (?) seems unlikely so warn about it
                 log_warn("AC:try join : already joined?!?");
@@ -317,8 +319,9 @@ static SM_STATE_ID_t State_TryJoin(void* arg, int e, void* data) {
             // Update to say we are not in stock mode
             ctx->stockMode = 1;
             CFMgr_setElement(CFG_UTIL_KEY_STOCK_MODE, &ctx->stockMode, 1);
-            // do a busy cycle immediately
-            return MS_GETTING_SERIAL_MODS;
+            app_core_msg_ul_init(&ctx->txmsg);
+            ctx->ulIsCrit = false;       // assume we're not gonna send it (its not critical)
+            return MS_GETTING_SERIAL_MODS;      // go directly get data and send it
         }
         case ME_LORA_JOIN_FAIL: {
             // For stock mode, check if we ever managed to join (which sets stock mode to false)
@@ -464,7 +467,17 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
         }
         case SM_TIMEOUT: {
             LPMgr_exitsleep();      // TODO fake exit from WFI
-            // timeout -> did we move? deal with difference between moving and not moving times
+            // Call any module's tic cbs that are registered (before checking run cycle)
+            for(int i=0;i<ctx->nMods;i++) {
+                if (isModActive(ctx->modsMask, ctx->mods[i].id)) {
+                    // Call if defined
+                    if (ctx->mods[i].api->ticCB!=NULL) {
+                        (*(ctx->mods[i].api->ticCB))();
+                    }
+                }
+            }
+
+            // calculate timeout -> did we move? deal with difference between moving and not moving times
             uint32_t idletimeMS = ctx->idleTimeNotMovingMins * 60000;
             // check if has moved recently and use different timeout
             if (MMMgr_hasMovedSince(ctx->lastULTime)) {
@@ -478,15 +491,6 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             // else stay here. reset timeout for next check
             sm_timer_start(ctx->mySMId, ctx->idleTimeCheckSecs*1000);
             log_debug("AC:reidle %ds as %d < %d", ctx->idleTimeCheckSecs, dt, idletimeMS);
-            // Call any module's tic cbs
-            for(int i=0;i<ctx->nMods;i++) {
-                if (isModActive(ctx->modsMask, ctx->mods[i].id)) {
-                    // Call if defined
-                    if (ctx->mods[i].api->ticCB!=NULL) {
-                        (*(ctx->mods[i].api->ticCB))();
-                    }
-                }
-            }
             LPMgr_setLPMode(ctx->lpUserId, LP_DEEPSLEEP);
             log_debug("AC : sleeping @ level %d", LPMgr_entersleep());     // fake hook of OS WFI
 
@@ -530,6 +534,8 @@ static SM_STATE_ID_t State_GettingSerialMods(void* arg, int e, void* data) {
             // find first serial guy by sending ourselves the done event with idx=-1
             ctx->currentSerialModIdx = -1;
             sm_sendEvent(ctx->mySMId, ME_MODULE_DONE, NULL);
+            // NOTE : the UL message is initialise when entering idle -> this lets any code that 
+            // executes during idle (eg on a tic) put their data in directly.
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
@@ -670,12 +676,13 @@ static LORA_TX_RESULT_t tryTX(struct appctx* ctx, bool willListen) {
                 &(ctx->txmsg.msgs[ctx->txmsg.msbNbTxing].payload[0]), txsz, lora_tx_cb, ctx);
         if (txres==LORAWAN_RES_OK) {
             res = LORA_TX_OK;
+            log_info("AC:UL tx req SF %d, ack %d, listen %d, sz %d", ctx->loraCfg.loraSF,ctx->loraCfg.useAck, willListen,txsz);
         } else {
             res = LORA_TX_ERR_RETRY;
             log_warn("AC:no UL tx said %d", txres);
         }
     } else {
-        log_info("AC:no UL finalise said %d", txsz);
+        log_info("AC:no UL to send");
         res = LORA_TX_NO_TX;    // not an actual error but no tx so no point waiting for result
     }
     return res;
@@ -727,27 +734,27 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
             LORA_TX_RESULT_t res = ((LORA_TX_RESULT_t)data);
             switch (res) {
                 case LORA_TX_OK_ACKD: {
-                    log_info("AC:lora tx is ACKD, check next");
+                    log_info("AC:tx : ACKD");
                     ctx->lastULTime = TMMgr_getRelTime();
                     break;
                 }
                 case LORA_TX_OK: {
-                    log_info("AC:lora tx is OK, check next");
+                    log_info("AC:tx : OK");
                     ctx->lastULTime = TMMgr_getRelTime();
                     break;
                 }
                 case LORA_TX_ERR_NOTJOIN: {
                     // Retry join here? change the SF? TODO
-                    log_warn("AC:lora tx fails as JOIN fail, going idle");
+                    log_warn("AC:tx : fail : notJOIN?");
                     return MS_IDLE;
                 }
                 case LORA_TX_ERR_FATAL: {
-                    log_error("AC:lora tx result is FATAL ERROR, assert!");
+                    log_error("AC:tx : FATAL ERROR, assert/restart!");
                     assert(0);
                     return MS_IDLE;
                 }
                 default: {
-                    log_warn("AC:lora tx result %d not cased", res);
+                    log_warn("AC:tx : result %d? trynext", res);
                     break; // fall out
                 }
             }
@@ -849,7 +856,7 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_TXPORT, &_ctx.loraCfg.txPort, sizeof(uint8_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_RXPORT, &_ctx.loraCfg.rxPort, sizeof(uint8_t));
     // Note the api wants the ids in init -> this means if user changes in AT then they need to reboot...    
-    lora_api_init(&_ctx.loraCfg.deveui[0], &_ctx.loraCfg.appeui[0], &_ctx.loraCfg.appkey[0]); 
+    lora_api_init(&_ctx.loraCfg.deveui[0], &_ctx.loraCfg.appeui[0], &_ctx.loraCfg.appkey[0], _ctx.loraCfg.useAdr, _ctx.loraCfg.loraSF, _ctx.loraCfg.txPower); 
     LORAWAN_RESULT_t rxres = lora_api_registerRxCB(-1, lora_rx_cb, &_ctx);  
     if (rxres!=LORAWAN_RES_OK) {
         // oops
