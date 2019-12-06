@@ -74,6 +74,27 @@ uint8_t* app_core_msg_ul_addTLgetVP(APP_CORE_UL_t* ul, uint8_t t, uint8_t l) {
     ul->msgs[ul->msgNbFilling].sz+=l;
     return vp;
 }
+// get the max continugous data block we know how to send in UL
+uint8_t app_core_msg_ul_maxBlockSz() {
+    return (APP_CORE_UL_MAX_SZ - 2);        // coz header
+}
+
+// Return number of bytes still available in this UL
+uint8_t app_core_msg_ul_remainingSz(APP_CORE_UL_t* ul) {
+    return (APP_CORE_UL_MAX_SZ - ul->msgs[ul->msgNbFilling].sz);
+}
+
+// Force switch to next UL, and return number of bytes allowed in it
+// returns 0 if no more ULs available... (and does NOT switch in this case in case someelse wants to use them)
+uint8_t app_core_msg_ul_requestNextUL(APP_CORE_UL_t* ul) {
+    // If incrementing takes us beyond end, don't and return 0
+    if ((ul->msgNbFilling+1)>= APP_CORE_UL_MAX_NB) {
+        return 0;
+    }
+    ul->msgNbFilling++;
+    ul->msgs[ul->msgNbFilling].sz = 2;     // skip header which we add later
+    return (APP_CORE_UL_MAX_SZ - ul->msgs[ul->msgNbFilling].sz);
+}
 
 // return the size of the final UL
 uint8_t app_core_msg_ul_finalise(APP_CORE_UL_t* ul, uint8_t lastDLId, bool willListen) {

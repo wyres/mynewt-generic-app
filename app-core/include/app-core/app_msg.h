@@ -60,6 +60,15 @@ typedef struct {
 void app_core_msg_ul_init(APP_CORE_UL_t* msg);
 bool app_core_msg_ul_addTLV(APP_CORE_UL_t* msg, uint8_t t, uint8_t l, void* v);
 uint8_t* app_core_msg_ul_addTLgetVP(APP_CORE_UL_t* ul, uint8_t t, uint8_t l) ;
+// get the max continugous data block we know how to send in UL
+/// <returns>Returns maximum continuous block size in bytes that a message can ever hold</returns>
+uint8_t app_core_msg_ul_maxBlockSz();
+// Return number of bytes still available in this UL
+/// <returns>Returns remaining size in bytes that this message can hold</returns>
+uint8_t app_core_msg_ul_remainingSz(APP_CORE_UL_t* ul);
+// Force switch to next UL, and return number of bytes allowed in it
+// returns 0 if no more ULs available... (and does NOT switch in this case in case someelse wants to use them)
+uint8_t app_core_msg_ul_requestNextUL(APP_CORE_UL_t* ul);
 uint8_t app_core_msg_ul_finalise(APP_CORE_UL_t* msg, uint8_t lastDLId, bool willListen);
 void app_core_msg_dl_init(APP_CORE_DL_t* msg);
 bool app_core_msg_dl_decode(APP_CORE_DL_t* msg);

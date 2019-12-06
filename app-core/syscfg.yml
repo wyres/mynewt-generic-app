@@ -30,4 +30,8 @@ syscfg.defs:
         description: "uart selector value"
         value: -1
 
+    LORA_DEFAULT_ADR:
+        description: "default config allows ADR or not?"
+        value: false
+
 syscfg.vals:
