@@ -239,7 +239,7 @@ void mod_env_init(void) {
     // If not 0, calculate offset and write to config
     if (pref!=0) {
         // Get current pressure
-        uint32_t currp = SRMgr_getPressurePa();
+        int32_t currp = SRMgr_getPressurePa();
         // Calculate offset
         _ctx.pressureOffsetPa = pref - currp;
         CFMgr_setElement(CFG_UTIL_KEY_ENV_PRESSURE_OFFSET, &_ctx.pressureOffsetPa, sizeof(_ctx.pressureOffsetPa));
