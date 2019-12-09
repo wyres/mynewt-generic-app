@@ -80,7 +80,7 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
         }
         case WBLE_SCAN_RX_IB: {
 //            log_debug("MBT:ib %d:%d rssi %d", ib->major, ib->minor, ib->rssi);
-            // just get them all at the end
+            // POLL for all the ones seen at the end
             break;
         }
         default: {
@@ -135,6 +135,7 @@ static bool getData(APP_CORE_UL_t* ul) {
     uint32_t now = TMMgr_getTime();
     ibeacon_data_t* iblist = wble_getIBList(_ctx.wbleCtx, &nb);
     if (iblist!=NULL) {
+        log_debug("MBT: processing %d BLE", nb);
         // for each one in the new scan list, update the current list, flagging new ones
         for(int i=0;i<nb;i++) {
             uint8_t bletype = (iblist[i].major & 0xff00) >> 8;
@@ -167,11 +168,13 @@ static bool getData(APP_CORE_UL_t* ul) {
             } else if (bletype>=BLE_TYPE_COUNTABLE_START && bletype<=BLE_TYPE_COUNTABLE_END) {
                 // countable type : just inc its counter
                 int idx = (bletype - BLE_TYPE_COUNTABLE_START);
-                // dont wrap the counter. 255==too many to count...
-                if (_ctx.tcount[idx]<255) {
-                    _ctx.tcount[idx]++;
-                }
-                nbCount++;
+                if (idx>=0 && idx<=BLE_NTYPES) {
+                    // dont wrap the counter. 255==too many to count...
+                    if (_ctx.tcount[idx]<255) {
+                        _ctx.tcount[idx]++;
+                    }
+                    nbCount++;
+                } // else cannot happen...
             }
         }
     } else {
@@ -189,12 +192,38 @@ static bool getData(APP_CORE_UL_t* ul) {
     if (nbExit>_ctx.maxExitPerUL) {
         nbExit = _ctx.maxExitPerUL;
     }
-    if (nbExit>0) {
+
+    // Count enters (must count all in case left over 'new' ones from last time that didn't fit in UL)
+    for(int i=0;i<MAX_BLE_TRACKED;i++) {
+        if (_ctx.iblist[i].new) {
+            nbEnter++;
+        }
+    }
+    if (nbEnter>_ctx.maxEnterPerUL) {
+        nbEnter = _ctx.maxEnterPerUL;
+    }
+
+    // Count number of types with non-zero counts
+    int nbTypes = 0;
+    for(int i=0;(i<BLE_NTYPES);i++) {
+        if (_ctx.tcount[i]>0) {
+            nbTypes++;
+        }
+    }
+
+    // Adjust numbers to divide up remaining UL space 'fairly' between enter/exit/types
+    // TODO
+    int nbEnterToAdd = nbEnter;
+    int nbExitToAdd = nbExit;
+    int nbTypesToAdd = nbTypes;
+
+    // Now add the appropriate numbers of each element
+    if (nbExitToAdd>0) {
         // TODO deal with case where nbExit is too big for 1 UL and needs split across multiple
-        uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_EXIT, nbExit*3);
+        uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_EXIT, nbExitToAdd*3);
         if (vp!=NULL) {
             int nbInMessage = 0;
-            for(int i=0;i<MAX_BLE_TRACKED && nbInMessage<nbExit;i++) {
+            for(int i=0;i<MAX_BLE_TRACKED && nbInMessage<nbExitToAdd;i++) {
                 if ((_ctx.iblist[i].lastSeenAt>0) && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60*1000)) {
                     // add maj/min to UL 
                     *vp++=(_ctx.iblist[i].ib.major & 0xFF);        // Just LSB of major
@@ -208,47 +237,55 @@ static bool getData(APP_CORE_UL_t* ul) {
         }
     }
     // put up to max enter elemnents into UL.
-    // Count first (must count all in case left over 'new' ones from last time that didn't fit in UL)
-    for(int i=0;i<MAX_BLE_TRACKED;i++) {
-        if (_ctx.iblist[i].new) {
-            nbEnter++;
-        }
-    }
-
-    if (nbEnter>_ctx.maxEnterPerUL) {
-        nbEnter = _ctx.maxEnterPerUL;
-    }
-    if (nbEnter>0) {
-        // TODO deal with case where nbEnter is too big for 1 UL and needs split across multiple
-//        int nbInThisUL = app_core_msg_ul_getSpace()/5;
-        uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_ENTER, nbEnter*5);
-        if (vp!=NULL) {
-            int nbInMessage = 0;
-            for(int i=0;i<MAX_BLE_TRACKED && nbInMessage<nbEnter;i++) {
-                if (_ctx.iblist[i].new) {
+    if (nbEnterToAdd>0) {
+        int nbInThisUL = 0;
+        uint8_t* vp = NULL;
+        for(int i=0;i<MAX_BLE_TRACKED && nbEnterToAdd>0;i++) {
+            if (_ctx.iblist[i].new) {
+                // Did we finish with the current UL block?
+                if (vp==NULL) {
+                    // allocate space in UL
+                    nbInThisUL = app_core_msg_ul_remainingSz(ul)/5;
+                    if (nbInThisUL==0) {
+                        // force change to next one and get the size (may be 0)
+                        nbInThisUL = app_core_msg_ul_requestNextUL(ul)/5;
+                    }
+                    // Check if space is greater than we need
+                    if (nbInThisUL > nbEnterToAdd) {
+                        nbInThisUL = nbEnterToAdd;
+                    }
+                    if (nbInThisUL>0) {
+                        vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_ENTER, nbInThisUL*5);
+                        if (vp==NULL) {
+                            // soz
+                            nbEnterToAdd=0;  //done
+                        }
+                    } else {
+                        nbEnterToAdd=0;      // can do no more
+                    }
+                }
+                if (vp!=NULL) {
+                    nbEnterToAdd--;          // one less overall
+                    nbInThisUL--;       // one less in this message
                     // add maj/min to UL 
-                    *vp++=(_ctx.iblist[i].ib.major & 0xFF);        // Just LSB of major
+                    *vp++ = (_ctx.iblist[i].ib.major & 0xFF);        // Just LSB of major
                     *vp++ = (_ctx.iblist[i].ib.minor & 0xff);
                     *vp++ = ((_ctx.iblist[i].ib.minor >> 8) & 0xff);
                     *vp++ = _ctx.iblist[i].ib.rssi;
                     *vp++ = _ctx.iblist[i].ib.extra;
                     _ctx.iblist[i].new = false;
-                    nbInMessage++;
+                    // If done this UL, set vp to null to try realloc in next one
+                    if (nbInThisUL==0) {
+                        vp=NULL;
+                    }
                 }
             }
         }
     }
-    // Count number of types with non-zero counts
-    int nbTypes = 0;
-    for(int i=0;(i<BLE_NTYPES);i++) {
-        if (_ctx.tcount[i]>0) {
-            nbTypes++;
-        }
-    }
     // put in types and counts
-    if (nbTypes>0) {
+    if (nbTypesToAdd>0) {
         // TODO deal with case where nbTypes is too big for 1 UL and needs split across multiple
-        uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_COUNT, 2*nbTypes);
+        uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_COUNT, 2*nbTypesToAdd);
         if (vp!=NULL) {
             for(int i=0;(i<BLE_NTYPES);i++) {
                 if (_ctx.tcount[i]>0) {
@@ -258,7 +295,7 @@ static bool getData(APP_CORE_UL_t* ul) {
                 }
             }
         } else {
-            log_debug("MBT: no room in UL for %d countable tag types ", nbTypes);
+            log_debug("MBT: no room in UL for %d countable tag types ", nbTypesToAdd);
         }
     } else {
         log_debug("MBT: no countable tags seen");

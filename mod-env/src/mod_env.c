@@ -159,10 +159,10 @@ static bool getData(APP_CORE_UL_t* ul) {
         // get altimetre
         uint8_t v[4];
 
-        uint32_t vp = SRMgr_getPressurePa();
+        int32_t vp = SRMgr_getPressurePa();
         // apply offset
         vp = vp + _ctx.pressureOffsetPa;
-        Util_writeLE_uint32_t(v, 0, vp);
+        Util_writeLE_int32_t(v, 0, vp);
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_PRESSURE, sizeof(v), v);
     }
     if (forceULData || SRMgr_hasTempChanged()) {

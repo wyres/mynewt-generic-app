@@ -454,7 +454,6 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             // and stay idle in deep sleep this time
             // Note this means that no DL rx should be possible in IDLE state - must wait elsewhere if you expect DL...
             LPMgr_setLPMode(ctx->lpUserId, LP_DEEPSLEEP);
-            log_debug("AC : sleeping @ level %d", LPMgr_entersleep());     // fake hook of OS WFI
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {
@@ -466,7 +465,6 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             return SM_STATE_CURRENT;
         }
         case SM_TIMEOUT: {
-            LPMgr_exitsleep();      // TODO fake exit from WFI
             // Call any module's tic cbs that are registered (before checking run cycle)
             for(int i=0;i<ctx->nMods;i++) {
                 if (isModActive(ctx->modsMask, ctx->mods[i].id)) {
@@ -492,14 +490,12 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             sm_timer_start(ctx->mySMId, ctx->idleTimeCheckSecs*1000);
             log_debug("AC:reidle %ds as %d < %d", ctx->idleTimeCheckSecs, dt, idletimeMS);
             LPMgr_setLPMode(ctx->lpUserId, LP_DEEPSLEEP);
-            log_debug("AC : sleeping @ level %d", LPMgr_entersleep());     // fake hook of OS WFI
 
             return SM_STATE_CURRENT;
         }
 
         case ME_FORCE_UL: {
             // another module woke us up...
-            LPMgr_exitsleep();      // TODO fake exit from WFI
             // potentially deal with request to only run 1 module.... data is either NULL or 1000+module id
             _ctx.requestedModule = -1;
             if (data!=NULL) {
