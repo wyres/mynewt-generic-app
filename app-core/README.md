@@ -86,58 +86,63 @@ See app_core.h for the list. Some key ones:
 0407 : idle period check time (in seconds, 60s default)
 0408 : stock mode : 0 = goto stock mode if JOIN fails, 1=retry if JOIN fails
 
-| module | config identifier | length |  description | 
-| --------: | :--------: | :--------:  | :--------: |
-| UTIL | 0001 | 8 | Reboot reason |
-| UTIL | 0002 | 64 | store fn tracker buffer in case of reboot |
-| UTIL | 0003 | 4 | Assert caller |
-| LORA | 0101 | - | Dev EUI |
-| LORA | 0102 | - | App EUI |
-| LORA | 0103 | - | App KEY |
-| LORA | 0104 | - | Dev ADDR |
-| LORA | 0105 | - | Network session key |
-| LORA | 0106 | - | App session key |
-| LORA | 0107 | - | ADR enabled |
-| LORA | 0108 | - | Acknoledgement |
-| LORA | 0109 | - | data rate |
-| LORA | 010A | - | tx power |
-| LORA | 010B | - | port for TX |
-| LORA | 010C | - | port for RX |
-| APP | 0201 | - | CFG_UTIL_KEY_CHECKINTERVAL repos\generic\generic\include\wyres-generic\appConfigKeys.h  used ? |
-| WYRES | 0301 | - | CFG_WYRES_KEY_TAG_SYNC_DM_INTERVAL  used ? |
-| WYRES | 0302 | - | CFG_WYRES_KEY_LORA_TXPOWER  used ? |
-| WYRES | 0303 | - | CFG_WYRES_KEY_BLE_SCANWINDOW  used ? |
-| WYRES | 0304 | - | CFG_WYRES_KEY_TAG_NONSYNC_DM_INTERVAL  used ? |
-| WYRES | 0305 | - | CFG_WYRES_KEY_FOTA_VER  used ? |
-| APP_CORE | 0401 | - | idle time when moving (in seconds) |
-| APP_CORE | 0402 | - | idle time not moving (in minutes) |
-| APP_CORE | 0403 | - | MODSETUP_TIME_SECS |
-| APP_CORE | 0404 | - | MODS_ACTIVE_MASK |
-| APP_CORE | 0405 | - | Maximal time between uplink in minutes |
-| APP_CORE | 0406 | - | Downlink id (dlid) |
-| APP_CORE | 0407 | - | idle period check time (in seconds, 60s default) |
-| APP_CORE | 0408 | - | Stock mode |
-| APP_CORE | 0409 | - | Join timeout (in seconds) |
-| APP_CORE | 040A | - | Join retry interval (in minutes) |
-| APP_CORE | 040B | - | Firmware infos |
-| APP_MOD | 0501 | - | BLE scan duration un ms |
-| APP_MOD | 0502 | - | GPS cold time in seconds |
-| APP_MOD | 0503 | - | GPS warm time in seconds |
-| APP_MOD | 0504 | - | GPS power mode |
-| APP_MOD | 0505 | - | GPS fix mode |
-| APP_MOD | 050A | - | Max navigation BLE per uplink |
-| APP_MOD | 050B | - | Ble EXIT timeout (in minuts) |
-| APP_MOD | 050C | - | Max enter per uplink |
-| APP_MOD | 050D | - | Max exit per uplink |
-| APP_MOD | 0510 | - | iBeacon UUID |
-| APP_MOD | 0511 | - | iBeacon major |
-| APP_MOD | 0512 | - | iBeacon minor |
-| APP_MOD | 0513 | - | iBeacon period (in milisecond) |
-| APP_MOD | 0514 | - | iBeacon txPower |
-| APP_MOD | 0520 | - | Pressure reference |
-| APP_MOD | 0521 | - | Pressure offset |
-
-DL Action handling
+| module    | config ID | length |                                          description  
+| --------: | :-------: | :----: | :---------------------------------------------------------------------------------------: 
+| UTIL      | 0001      | 8      | Reboot reason 
+| UTIL      | 0002      | 64     | store fn tracker buffer in case of reboot 
+| UTIL      | 0003      | 4      | Assert caller 
+| UTIL      | 0004      | 1      | Accelerometer detection mode (0 = OFF, 1 = SHOCK DETECTION, 2 = FREE FALL DETECTION) 
+| UTIL      | 0005      | -      | Shock detection threshold 
+| UTIL      | 0006      | -      | Free fall detection threshold 
+| UTIL      | 0007      | -      | Minimal shock detection duration (in tenth of seconds, default value = 6) 
+| UTIL      | 0008      | -      | Minimal free fall detection duration (in tenth of seconds, default value = 6) 
+| LORA      | 0101      | -      | Dev EUI 
+| LORA      | 0102      | -      | App EUI 
+| LORA      | 0103      | -      | App KEY 
+| LORA      | 0104      | -      | Dev ADDR 
+| LORA      | 0105      | -      | Network session key 
+| LORA      | 0106      | -      | App session key 
+| LORA      | 0107      | -      | ADR enabled 
+| LORA      | 0108      | -      | Acknoledgement 
+| LORA      | 0109      | -      | data rate 
+| LORA      | 010A      | -      | tx power 
+| LORA      | 010B      | -      | port for TX 
+| LORA      | 010C      | -      | port for RX 
+| APP       | 0201      | -      | CFG_UTIL_KEY_CHECKINTERVAL repos\generic\generic\include\wyres-generic\appConfigKeys.h  used ? 
+| WYRES     | 0301      | -      | CFG_WYRES_KEY_TAG_SYNC_DM_INTERVAL  used ? 
+| WYRES     | 0302      | -      | CFG_WYRES_KEY_LORA_TXPOWER  used ? 
+| WYRES     | 0303      | -      | CFG_WYRES_KEY_BLE_SCANWINDOW  used ? 
+| WYRES     | 0304      | -      | CFG_WYRES_KEY_TAG_NONSYNC_DM_INTERVAL  used ? 
+| WYRES     | 0305      | -      | CFG_WYRES_KEY_FOTA_VER  used ? 
+| APP_CORE  | 0401      | -      | idle time when moving (in seconds) 
+| APP_CORE  | 0402      | -      | idle time not moving (in minutes) 
+| APP_CORE  | 0403      | -      | MODSETUP_TIME_SECS 
+| APP_CORE  | 0404      | -      | MODS_ACTIVE_MASK 
+| APP_CORE  | 0405      | -      | Maximal time between uplink in minutes 
+| APP_CORE  | 0406      | -      | Downlink id (dlid) 
+| APP_CORE  | 0407      | -      | idle period check time (in seconds, 60s default) 
+| APP_CORE  | 0408      | -      | Stock mode 
+| APP_CORE  | 0409      | -      | Join timeout (in seconds) 
+| APP_CORE  | 040A      | -      | Join retry interval (in minutes) 
+| APP_CORE  | 040B      | -      | Firmware infos 
+| APP_MOD   | 0501      | -      | BLE scan duration un ms 
+| APP_MOD   | 0502      | -      | GPS cold time in seconds 
+| APP_MOD   | 0503      | -      | GPS warm time in seconds 
+| APP_MOD   | 0504      | -      | GPS power mode 
+| APP_MOD   | 0505      | -      | GPS fix mode 
+| APP_MOD   | 050A      | -      | Max navigation BLE per uplink 
+| APP_MOD   | 050B      | -      | Ble EXIT timeout (in minuts) 
+| APP_MOD   | 050C      | -      | Max enter per uplink 
+| APP_MOD   | 050D      | -      | Max exit per uplink 
+| APP_MOD   | 0510      | -      | iBeacon UUID 
+| APP_MOD   | 0511      | -      | iBeacon major 
+| APP_MOD   | 0512      | -      | iBeacon minor 
+| APP_MOD   | 0513      | -      | iBeacon period (in milisecond) 
+| APP_MOD   | 0514      | -      | iBeacon txPower 
+| APP_MOD   | 0520      | -      | Pressure reference 
+| APP_MOD   | 0521      | -      | Pressure offset 
+     
+DL Action handling      
 ------------------
 App-core handles the reception and decoding of the DL packets. These consist of a set of 'actions', each with a 1 byte key (defined in app_core.h). Modules can register to execute specific action keys at startup - only 1 module can register for each key and the system will assert() if more than one tries.
 Most of the core actions are handled by the app_core.c file, including reset, get/setcfg and setting UTCTime.
