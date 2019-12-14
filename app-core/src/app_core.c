@@ -981,25 +981,6 @@ static void executeDL(struct appctx* ctx, APP_CORE_DL_t* data) {
     }
 }
 
-// helper to read LE from buffer (may be 0 stripped)
-uint32_t readUINT32LE(uint8_t* b, uint8_t l) {
-    uint32_t ret = 0;
-    for(int i=0;i<4;i++) {
-        if (b!=NULL && i<l) {
-            ret += (b[i] << 8*i);
-        } // else 0
-    }
-    return ret;
-}
-uint16_t readUINT16LE(uint8_t* b, uint8_t l) {
-    uint16_t ret = 0;
-    for(int i=0;i<2;i++) {
-        if (b!=NULL && i<l) {
-            ret += (b[i] << 8*i);
-        } // else 0
-    }
-    return ret;
-}
 static void A_reboot(uint8_t* v, uint8_t l) {
     log_info("action REBOOT");
     // must wait till execute actions finished
@@ -1011,7 +992,7 @@ static void A_setConfig(uint8_t* v, uint8_t l) {
         log_warn("AC:action SETCONFIG BAD (too short value)");
     }
     // value is 2 bytes config id, l-2 bytes value to set
-    uint16_t key = readUINT16LE(v, 2);
+    uint16_t key = Util_readLE_uint16_t(v, 2);
     // Check if length is as the config key is already expecting
     uint8_t exlen = CFMgr_getElementLen(key);
     if (exlen==(l-2)) {
@@ -1030,26 +1011,39 @@ static void A_getConfig(uint8_t* v, uint8_t l) {
         log_warn("AC:action GETCONFIG BAD (too short value)");
     }
     // value is 2 bytes config id
-    uint16_t key = readUINT16LE(v, 2);
-    uint8_t vb[16];     // only allow to get keys up to 16 bytes..
-    int cl = CFMgr_getElement(key, vb, 16);
+    uint16_t key = Util_readLE_uint16_t(v, 2);
+    uint8_t vb[20];     // 2 bytes key, 1 byte len, only allow to get keys up to 16 bytes..
+    int cl = CFMgr_getElement(key, &vb[3], 16);
     if (cl>0) {
-        log_info("AC:action GETCONFIG (%d) value [");
+        log_info("AC:action GETCONFIG (%4x) value [", key);
+        // Must give key/len as DL may request multiple!
+        Util_writeLE_uint16_t(vb, 0, key);
+        vb[2] = cl;
         for(int i=0;i<cl;i++) {
             log_info("%02x", vb[i]);
         }
         // Allowed to add to UL during action execution
-        if (app_core_msg_ul_addTLV(&_ctx.txmsg, APP_CORE_UL_CONFIG, cl, vb)) {
+        if (app_core_msg_ul_addTLV(&_ctx.txmsg, APP_CORE_UL_CONFIG, cl+3, vb)) {
             log_info("] added to UL");
         } else {
-            log_warn("] could not be added to UL");
+            log_warn("] too long for UL");
         }
     } else {
-            log_warn("AC:action GETCONFIG (%d) no such key");
+            log_warn("AC:action GETCONFIG (%4x) no such key", key);
     }
 }
 static void A_fota(uint8_t* v, uint8_t l) {
-    log_info("AC:action FOTA (TBI)");
+    // Expected to get 7 bytes of param:
+    if (l!=7) {
+        log_warn("AC:ignore FOTA bad len %d",l);
+        return;
+    }
+    uint8_t fwmaj = v[0]; 
+    uint8_t fwmin = v[1]; 
+    uint8_t fwbuild = v[2];
+    uint32_t fwhash = Util_readLE_uint32_t(&v[3], 4); 
+    log_info("AC:action FOTA (%d/%d/%d : %8x)", fwmaj, fwmin, fwbuild, fwhash);
+    // TODO set ready for fota
 }
 
 static void A_flashled(int8_t led, uint8_t* v, uint8_t l) {
@@ -1083,7 +1077,7 @@ static void A_flashled2(uint8_t* v, uint8_t l) {
 }
 static void A_settime(uint8_t* v, uint8_t l) {
     log_info("AC:action SETTIME");
-    uint32_t now = readUINT32LE(v, l);
+    uint32_t now = Util_readLE_uint32_t(v, l);
     // boot time in UTC is now - time elapsed since boot
     TMMgr_setBootTime(now - TMMgr_getRelTime());
 }

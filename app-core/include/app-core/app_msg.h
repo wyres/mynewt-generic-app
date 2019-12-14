@@ -30,7 +30,7 @@ extern "C" {
 
 // UL Message : 1st 2 bytes are header, then TLV blocks (1 byte T, 1byte L, n bytes V)
 // 2 byte fixed header: 
-//	0 : b0-3: ULrespid, b4-5: protocol version, b6: 1=listening for DL, 0=not listening, b7: force even parity for this byte
+//	0 : b0-3: UL respid, b4-5: protocol version, b6: 1=listening for DL, 0=not listening, b7: force even parity for this byte
 //	1 : length of following TLV block
 typedef struct {
     struct {
