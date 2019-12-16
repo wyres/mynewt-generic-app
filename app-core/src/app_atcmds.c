@@ -51,6 +51,11 @@ static ATRESULT atcmd_reset(uint8_t nargs, char* argv[]) {
 }
 static void printKey(uint16_t k) {
     uint8_t d[16];
+    // Must explicitly check for illegal key (0000) as used for error check ie assert in configmgr
+    if (k==CFG_KEY_ILLEGAL) {
+        wconsole_println("Key[%04x]=NOT FOUND", k);
+        return;
+    }
     // get element max data length 16
     int l =  CFMgr_getElement(k, d, 16);
     switch(l) {
@@ -109,7 +114,7 @@ static ATRESULT atcmd_getcfg(uint8_t nargs, char* argv[]) {
         int kl = strlen(argv[1]);
         if (kl==2) {
             // get 2 digit key module
-            if (sscanf(argv[1], "%2x", &k)<0) {
+            if (sscanf(argv[1], "%2x", &k)<1) {
                 wconsole_println("Bad module [%s] must be 2 digits", argv[1]);
                 return ATCMD_BADARG;
             } else {
@@ -117,7 +122,7 @@ static ATRESULT atcmd_getcfg(uint8_t nargs, char* argv[]) {
                 CFMgr_iterateKeys(k, &printKey);
             }
         } else if (kl==4) {
-            if (sscanf(argv[1], "%4x", &k)<0) {
+            if (sscanf(argv[1], "%4x", &k)<1) {
                 wconsole_println("Bad key [%s] must be 4 hex digits", argv[1]);
                 return ATCMD_BADARG;
             } else {
@@ -141,7 +146,7 @@ static ATRESULT atcmd_setcfg(uint8_t nargs, char* argv[]) {
         return ATCMD_BADARG;
     }
     int k=0;
-    if (sscanf(argv[1], "%4x", &k)<0) {
+    if (sscanf(argv[1], "%4x", &k)<1) {
         wconsole_println("Key[%s] must be 4 digits", argv[1]);
     } else {
         // parse value
@@ -160,15 +165,15 @@ static ATRESULT atcmd_setcfg(uint8_t nargs, char* argv[]) {
                 char *vp = argv[2];
                 if (*vp=='0' && *(vp+1)=='x') {
                     if (strlen((vp+2))!=(l*2)) {
-                    wconsole_println("Key[%04x]=%s value is incorrect length. (expected %d bytes)", k, argv[2], l);
+                        wconsole_println("Key[%04x]=%s value is incorrect length. (expected %d bytes)", k, argv[2], l);
                         return ATCMD_BADARG;
                     }
-                    if (sscanf((vp+2), "%x", &v)<0) {
+                    if (sscanf((vp+2), "%x", &v)<1) {
                         wconsole_println("Key[%04x] bad hex value:%s",k,vp);
                         return ATCMD_BADARG;
                     }
                 } else {
-                    if (sscanf(vp, "%d", &v)<0) {
+                    if (sscanf(vp, "%d", &v)<1) {
                         wconsole_println("Key[%04x] bad dec value:%s",k,vp);
                         return ATCMD_BADARG;
                     }
@@ -199,7 +204,10 @@ static ATRESULT atcmd_setcfg(uint8_t nargs, char* argv[]) {
                 for(int i=0;i<l;i++) {
                     // sscanf into int (4 bytes) then copy just LSB as value for each byte
                     unsigned int b=0;
-                    sscanf(vp, "%02x", &b);
+                    if (sscanf(vp, "%02x", &b)<1) {
+                        wconsole_println("Key[%04x] bad hex : %s", k, vp);
+                        return ATCMD_BADARG;
+                    }
                     val[i] = b;
                     vp+=2;
                 }
@@ -289,6 +297,7 @@ static ATRESULT atcmd_setlogs(uint8_t nargs, char* argv[]) {
 }
 static ATRESULT atcmd_info(uint8_t nargs, char* argv[]) {
     // Display fw info, lora state, battery, last reboot reason, last assert etc etc
+    SRMgr_start();
     APP_CORE_FW_t* fwinfo = AppCore_getFwInfo();
     wconsole_println("FW:%s, v%d/%d.%d @%s", fwinfo->fwname, fwinfo->fwmaj, fwinfo->fwmin, fwinfo->fwbuild, fwinfo->fwdate);
     int hwrev = BSP_getHwVer();
@@ -300,6 +309,7 @@ static ATRESULT atcmd_info(uint8_t nargs, char* argv[]) {
     wconsole_println("LastReset: %04x", RMMgr_getResetReasonCode());
     wconsole_println("LastAssert:[0x%08x]", RMMgr_getLastAssertCallerFn());
     wconsole_println("LastWELog:[0x%08x]", RMMgr_getLogFn(0));
+    SRMgr_stop();
     return ATCMD_OK;
 }
 static ATCMD_DEF_t ATCMDS[] = {

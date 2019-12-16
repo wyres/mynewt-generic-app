@@ -813,17 +813,17 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const
     CFMgr_getOrAddElement(CFG_UTIL_KEY_HW_BASE_REV, &hwrev, sizeof(uint8_t));
     BSP_setHwVer(hwrev);
 
-    // Get the app core config
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMovingSecs, sizeof(uint32_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_MINS, &_ctx.idleTimeNotMovingMins, sizeof(uint32_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_IDLE_TIME_CHECK_SECS, &_ctx.idleTimeCheckSecs, sizeof(uint32_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_JOIN_TIMEOUT_SECS, &_ctx.joinTimeCheckSecs, sizeof(uint32_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_RETRY_JOIN_TIME_MINS, &_ctx.rejoinWaitMins, sizeof(uint32_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_RETRY_JOIN_TIME_SECS, &_ctx.rejoinWaitSecs, sizeof(uint32_t));
+    // Get the app core config, ensuring values are 'reasonable'
+    CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMovingSecs, 0, 24*60*60);
+    CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_MINS, &_ctx.idleTimeNotMovingMins, 0, 24*60);
+    CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_IDLE_TIME_CHECK_SECS, &_ctx.idleTimeCheckSecs, 15, 5*60);
+    CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_JOIN_TIMEOUT_SECS, &_ctx.joinTimeCheckSecs, 18, 30);
+    CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_RETRY_JOIN_TIME_MINS, &_ctx.rejoinWaitMins, 1, 24*60);
+    CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_RETRY_JOIN_TIME_SECS, &_ctx.rejoinWaitSecs, 15, 120);
     memset(&_ctx.modsMask[0], 0xff, MOD_MASK_SZ);       // Default every module is active
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MODS_ACTIVE_MASK, &_ctx.modsMask[0], MOD_MASK_SZ);
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_MAXTIME_UL_MINS, &_ctx.maxTimeBetweenULMins, sizeof(uint32_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_DL_ID, &_ctx.lastDLId, sizeof(uint8_t));
+    CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_MAXTIME_UL_MINS, &_ctx.maxTimeBetweenULMins, 1, 24*60);
+    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_DL_ID, &_ctx.lastDLId, 0,15);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_STOCK_MODE, &_ctx.stockMode, sizeof(uint8_t));
     CFMgr_registerCB(configChangedCB);      // For changes to our config
 
@@ -847,8 +847,8 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char* fwdate, const
 //    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_APPSKEY, &_ctx.loraCfg.appSkey, 16);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_ADREN, &_ctx.loraCfg.useAdr, sizeof(bool));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_ACKEN, &_ctx.loraCfg.useAck, sizeof(bool));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_SF, &_ctx.loraCfg.loraSF, sizeof(uint8_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_TXPOWER, &_ctx.loraCfg.txPower, sizeof(int8_t));
+    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_LORA_SF, &_ctx.loraCfg.loraSF, LORAWAN_SF7, LORAWAN_SF_DEFAULT);
+    CFMgr_getOrAddElementCheckRangeINT8(CFG_UTIL_KEY_LORA_TXPOWER, &_ctx.loraCfg.txPower, -30, 22);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_TXPORT, &_ctx.loraCfg.txPort, sizeof(uint8_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_RXPORT, &_ctx.loraCfg.rxPort, sizeof(uint8_t));
     // Note the api wants the ids in init -> this means if user changes in AT then they need to reboot...    

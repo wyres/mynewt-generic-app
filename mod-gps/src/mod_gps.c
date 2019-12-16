@@ -89,8 +89,8 @@ static uint32_t start() {
     uint32_t warmStartTime=60;
     uint8_t powermode = POWER_ONOFF;     
     uint8_t fixmode = FIX_ALWAYS; // FIX_ON_DEMAND;
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_GPS_COLD_TIME_SECS, &coldStartTime, sizeof(uint32_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_GPS_WARM_TIME_SECS, &warmStartTime, sizeof(uint32_t));
+    CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_GPS_COLD_TIME_SECS, &coldStartTime, 10, 15*60);
+    CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_GPS_WARM_TIME_SECS, &warmStartTime, 1, 15*60);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_GPS_POWER_MODE, &powermode, sizeof(uint8_t));
     gps_setPowerMode(powermode);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_GPS_FIX_MODE, &fixmode, sizeof(uint8_t));

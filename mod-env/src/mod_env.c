@@ -231,11 +231,10 @@ static APP_CORE_API_t _api = {
 // Initialise module
 void mod_env_init(void) {
     // Sensor initialisation
-    // TODO
     // Altimeter offset calibration
-    // Read reference pressure (set by testbed production) in PASCAL
+    // Read reference pressure (set by testbed production) in PASCALS. Note if its 0 this means no calibration this time.
     uint32_t pref = 0;
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_ENV_PRESSURE_REF, &pref, sizeof(pref));
+    CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_ENV_PRESSURE_REF, &pref, 0, 100000);
     // If not 0, calculate offset and write to config
     if (pref!=0) {
         // Get current pressure
@@ -247,8 +246,8 @@ void mod_env_init(void) {
         pref=0;
         CFMgr_setElement(CFG_UTIL_KEY_ENV_PRESSURE_REF, &pref, sizeof(pref));
     } else {
-        // get previously calculated calibration offset to use
-        CFMgr_getOrAddElement(CFG_UTIL_KEY_ENV_PRESSURE_OFFSET, &_ctx.pressureOffsetPa, sizeof(_ctx.pressureOffsetPa));
+        // get previously calculated calibration offset to use (checking its reasonable)
+        CFMgr_getOrAddElementCheckRangeINT32(CFG_UTIL_KEY_ENV_PRESSURE_OFFSET, &_ctx.pressureOffsetPa, -10000, 10000);
     }
     // hook app-core for env data
     AppCore_registerModule(APP_MOD_ENV, &_api, EXEC_PARALLEL);

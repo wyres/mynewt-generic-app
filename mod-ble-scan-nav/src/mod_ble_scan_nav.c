@@ -65,7 +65,7 @@ static uint32_t start() {
     wble_start(_ctx.wbleCtx, ble_cb);
     // Return the scan time
     uint32_t bleScanTimeMS = 3000;
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_SCAN_TIME_MS, &bleScanTimeMS, sizeof(uint32_t));
+    CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_BLE_SCAN_TIME_MS, &bleScanTimeMS, 1000, 60000);
 
     return bleScanTimeMS;
 }

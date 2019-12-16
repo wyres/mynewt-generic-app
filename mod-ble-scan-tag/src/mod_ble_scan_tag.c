@@ -352,12 +352,10 @@ void mod_ble_scan_tag_init(void) {
     // initialise access (this is resistant to multiple calls...)
     _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
 
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_EXIT_TIMEOUT_MINS, &_ctx.exitTimeoutMins, sizeof(uint8_t));
-    if (_ctx.exitTimeoutMins==0) {
-        _ctx.exitTimeoutMins= 1;
-    }
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_MAX_ENTER_PER_UL, &_ctx.maxEnterPerUL, sizeof(uint8_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_MAX_EXIT_PER_UL, &_ctx.maxExitPerUL, sizeof(uint8_t));
+    // exit timeout should actually be in function of the delay between scans...
+    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_EXIT_TIMEOUT_MINS, &_ctx.exitTimeoutMins, 1, 4*60);
+    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_MAX_ENTER_PER_UL, &_ctx.maxEnterPerUL, 1, 255);
+    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_MAX_EXIT_PER_UL, &_ctx.maxExitPerUL, 1, 255);
 
     // hook app-core for ble scan - serialised as competing for UART
     AppCore_registerModule(APP_MOD_BLE_SCAN_TAGS, &_api, EXEC_SERIAL);
