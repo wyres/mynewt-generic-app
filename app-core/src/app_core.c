@@ -1042,7 +1042,7 @@ static void A_fota(uint8_t* v, uint8_t l) {
     uint8_t fwmin = v[1]; 
     uint8_t fwbuild = v[2];
     uint32_t fwhash = Util_readLE_uint32_t(&v[3], 4); 
-    log_info("AC:action FOTA (%d/%d/%d : %8x)", fwmaj, fwmin, fwbuild, fwhash);
+    log_warn("AC:action FOTA (%d/%d/%d : %8x)", fwmaj, fwmin, fwbuild, fwhash);
     // TODO set ready for fota
 }
 
