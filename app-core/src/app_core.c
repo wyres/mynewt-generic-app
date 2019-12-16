@@ -476,9 +476,11 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             }
 
             // calculate timeout -> did we move? deal with difference between moving and not moving times
+            MMMgr_check();      // check hardware
             uint32_t idletimeMS = ctx->idleTimeNotMovingMins * 60000;
             // check if has moved recently and use different timeout
             if (MMMgr_hasMovedSince(ctx->lastULTime)) {
+                log_debug("AC:moved since last UL %d secs ago", (TMMgr_getRelTime() - MMMgr_getLastMovedTime())/1000);
                 idletimeMS = ctx->idleTimeMovingSecs*1000;
             }
             idletimeMS -= 1000;     // adjust by 1s to get run if 'close' to timeout
