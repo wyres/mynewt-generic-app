@@ -42,12 +42,17 @@ void app_core_msg_ul_init(APP_CORE_UL_t* ul) {
 }
 // Add TLV into payload if possible
 bool app_core_msg_ul_addTLV(APP_CORE_UL_t* ul, uint8_t t, uint8_t l, void* v) {
+    assert(ul!=NULL);
+    // Check if too big for message (taking into account header (2) and TL (2))
+    if ((l+2+2) > APP_CORE_UL_MAX_SZ) {
+        return NULL;        // this will never fit in any UL, sorry
+    }
     if ((ul->msgs[ul->msgNbFilling].sz + l + 2) > APP_CORE_UL_MAX_SZ) {
-        ul->msgNbFilling++;
-        if (ul->msgNbFilling>= APP_CORE_UL_MAX_NB) {
-            // too full
+        if ((ul->msgNbFilling+1)>= APP_CORE_UL_MAX_NB) {
+            // out of messages, stay on this message one but say no joy for caller
             return false;
         }
+        ul->msgNbFilling++;
         ul->msgs[ul->msgNbFilling].sz = 2;     // skip header which we add later
     }
     ul->msgs[ul->msgNbFilling].payload[ul->msgs[ul->msgNbFilling].sz++] = t;
@@ -60,12 +65,17 @@ bool app_core_msg_ul_addTLV(APP_CORE_UL_t* ul, uint8_t t, uint8_t l, void* v) {
 }
 // Add TL and return pointer to V space unless too full
 uint8_t* app_core_msg_ul_addTLgetVP(APP_CORE_UL_t* ul, uint8_t t, uint8_t l) {
+    assert(ul!=NULL);
+    // Check if too big for message (taking into account header (2) and TL (2))
+    if ((l+2+2) > APP_CORE_UL_MAX_SZ) {
+        return NULL;        // this will never fit in any UL, sorry
+    }
     if ((ul->msgs[ul->msgNbFilling].sz + l + 2) > APP_CORE_UL_MAX_SZ) {
-        ul->msgNbFilling++;
-        if (ul->msgNbFilling>= APP_CORE_UL_MAX_NB) {
-            // too full
-            return false;
+        if ((ul->msgNbFilling+1)>= APP_CORE_UL_MAX_NB) {
+            // out of messages, stay on this message one but say no joy for caller
+            return NULL;
         }
+        ul->msgNbFilling++;
         ul->msgs[ul->msgNbFilling].sz = 2;     // skip header which we add later
     }
     ul->msgs[ul->msgNbFilling].payload[ul->msgs[ul->msgNbFilling].sz++] = t;
@@ -82,6 +92,11 @@ uint8_t app_core_msg_ul_maxBlockSz() {
 // Return number of bytes still available in this UL
 uint8_t app_core_msg_ul_remainingSz(APP_CORE_UL_t* ul) {
     return (APP_CORE_UL_MAX_SZ - ul->msgs[ul->msgNbFilling].sz);
+}
+// Total space in all ULs left?
+uint8_t app_core_msg_ul_getTotalSpaceAvailable(APP_CORE_UL_t* ul) {
+    return app_core_msg_ul_remainingSz(ul) + 
+            ((APP_CORE_UL_MAX_NB - (ul->msgNbFilling+1)) * app_core_msg_ul_maxBlockSz());
 }
 
 // Force switch to next UL, and return number of bytes allowed in it

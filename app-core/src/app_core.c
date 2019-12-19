@@ -693,6 +693,7 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
             log_debug("AC:trying to send UL");
             // start leds for UL
             ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_5HZ, -1);
+            log_debug("UL has %d elements, sz %d %d %d %d",ctx->txmsg.msgNbFilling, ctx->txmsg.msgs[0].sz, ctx->txmsg.msgs[1].sz, ctx->txmsg.msgs[2].sz, ctx->txmsg.msgs[3].sz);
             LORA_TX_RESULT_t res = tryTX(ctx, true);
             if (res==LORA_TX_OK) {
                 // this timer should be big enough to have received any DL triggered by the ULs
@@ -751,12 +752,16 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
                     assert(0);
                     return MS_IDLE;
                 }
+                case LORA_TX_NO_TX: {
+                    log_info("AC:tx initial no UL, going idle");
+                    return MS_IDLE;
+                }
                 default: {
                     log_warn("AC:tx : result %d? trynext", res);
                     break; // fall out
                 }
             }
-            // See if we have another mssg to go. Note we say 'not listening' ie don't send me DL as we haven't 
+            // See if we have another msg to go. Note we say 'not listening' ie don't send me DL as we haven't 
             // processing any RX yet, so our 'lastDLId' is not up to date and we'll get a repeated action DL!
             res = tryTX(ctx, false);
             if (res==LORA_TX_OK) {

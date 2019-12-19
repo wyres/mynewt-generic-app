@@ -25,6 +25,167 @@
 #include "app-core/app_msg.h"
 #include "mod-ble/mod_ble.h"
 
+// test data uncomment one of the defines to use it
+//#define TEST_ENTER
+//#define TEST_COUNT
+#define STATIC_TEST_NB  (40)
+#ifdef TEST_ENTER
+static ibeacon_data_t STATIC_TEST_IBLIST_ENTER[] = {
+    {.major=0x8001, .minor=1, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=2, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=3, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=4, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=5, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=6, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=7, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=8, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=9, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=10, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=11, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=12, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=13, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=14, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=15, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=16, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=17, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=18, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=19, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=20, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=21, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=22, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=23, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=24, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=25, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=26, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=27, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=28, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=29, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=30, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=31, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=32, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=33, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=34, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=35, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=36, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=37, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=38, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=39, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=40, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=41, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=42, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=43, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=44, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=45, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=46, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=47, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=48, .rssi=-40, .extra=0},
+    {.major=0x8001, .minor=49, .rssi=-40, .extra=0},
+};
+#endif
+#ifdef TEST_COUNT
+static ibeacon_data_t STATIC_TEST_IBLIST_COUNT[] = {
+    {.major=0x0101, .minor=1, .rssi=-40, .extra=0},
+    {.major=0x0201, .minor=2, .rssi=-40, .extra=0},
+    {.major=0x0301, .minor=3, .rssi=-40, .extra=0},
+    {.major=0x0401, .minor=4, .rssi=-40, .extra=0},
+    {.major=0x0501, .minor=5, .rssi=-40, .extra=0},
+    {.major=0x0601, .minor=6, .rssi=-40, .extra=0},
+    {.major=0x0701, .minor=7, .rssi=-40, .extra=0},
+    {.major=0x0801, .minor=8, .rssi=-40, .extra=0},
+    {.major=0x0901, .minor=9, .rssi=-40, .extra=0},
+    {.major=0x0a01, .minor=10, .rssi=-40, .extra=0},
+    {.major=0x0b01, .minor=11, .rssi=-40, .extra=0},
+    {.major=0x0c01, .minor=12, .rssi=-40, .extra=0},
+    {.major=0x0d01, .minor=13, .rssi=-40, .extra=0},
+    {.major=0x0e01, .minor=14, .rssi=-40, .extra=0},
+    {.major=0x0f01, .minor=15, .rssi=-40, .extra=0},
+    {.major=0x1001, .minor=16, .rssi=-40, .extra=0},
+    {.major=0x1101, .minor=17, .rssi=-40, .extra=0},
+    {.major=0x1201, .minor=18, .rssi=-40, .extra=0},
+    {.major=0x1301, .minor=19, .rssi=-40, .extra=0},
+    {.major=0x1401, .minor=20, .rssi=-40, .extra=0},
+    {.major=0x1501, .minor=21, .rssi=-40, .extra=0},
+    {.major=0x1601, .minor=22, .rssi=-40, .extra=0},
+    {.major=0x1701, .minor=23, .rssi=-40, .extra=0},
+    {.major=0x1801, .minor=24, .rssi=-40, .extra=0},
+    {.major=0x1901, .minor=25, .rssi=-40, .extra=0},
+    {.major=0x1a01, .minor=26, .rssi=-40, .extra=0},
+    {.major=0x1b01, .minor=27, .rssi=-40, .extra=0},
+    {.major=0x1c01, .minor=28, .rssi=-40, .extra=0},
+    {.major=0x1d01, .minor=29, .rssi=-40, .extra=0},
+    {.major=0x1e01, .minor=30, .rssi=-40, .extra=0},
+    {.major=0x1f01, .minor=31, .rssi=-40, .extra=0},
+    {.major=0x2001, .minor=32, .rssi=-40, .extra=0},
+    {.major=0x2101, .minor=33, .rssi=-40, .extra=0},
+    {.major=0x2201, .minor=34, .rssi=-40, .extra=0},
+    {.major=0x2301, .minor=35, .rssi=-40, .extra=0},
+    {.major=0x2401, .minor=36, .rssi=-40, .extra=0},
+    {.major=0x2501, .minor=37, .rssi=-40, .extra=0},
+    {.major=0x2601, .minor=38, .rssi=-40, .extra=0},
+    {.major=0x2701, .minor=39, .rssi=-40, .extra=0},
+    {.major=0x2801, .minor=40, .rssi=-40, .extra=0},
+    {.major=0x2901, .minor=41, .rssi=-40, .extra=0},
+    {.major=0x2a01, .minor=42, .rssi=-40, .extra=0},
+    {.major=0x2b01, .minor=43, .rssi=-40, .extra=0},
+    {.major=0x2c01, .minor=44, .rssi=-40, .extra=0},
+    {.major=0x2d01, .minor=45, .rssi=-40, .extra=0},
+    {.major=0x2e01, .minor=46, .rssi=-40, .extra=0},
+    {.major=0x2f01, .minor=47, .rssi=-40, .extra=0},
+    {.major=0x3001, .minor=48, .rssi=-40, .extra=0},
+    {.major=0x3101, .minor=49, .rssi=-40, .extra=0},
+    {.major=0x3201, .minor=50, .rssi=-40, .extra=0},
+    {.major=0x3301, .minor=51, .rssi=-40, .extra=0},
+    {.major=0x3401, .minor=52, .rssi=-40, .extra=0},
+    {.major=0x3501, .minor=53, .rssi=-40, .extra=0},
+    {.major=0x3601, .minor=54, .rssi=-40, .extra=0},
+    {.major=0x3701, .minor=55, .rssi=-40, .extra=0},
+    {.major=0x3801, .minor=56, .rssi=-40, .extra=0},
+    {.major=0x3901, .minor=57, .rssi=-40, .extra=0},
+    {.major=0x3a01, .minor=58, .rssi=-40, .extra=0},
+    {.major=0x3b01, .minor=59, .rssi=-40, .extra=0},
+    {.major=0x3c01, .minor=60, .rssi=-40, .extra=0},
+    {.major=0x3d01, .minor=61, .rssi=-40, .extra=0},
+    {.major=0x3e01, .minor=62, .rssi=-40, .extra=0},
+    {.major=0x3f01, .minor=63, .rssi=-40, .extra=0},
+    {.major=0x4001, .minor=64, .rssi=-40, .extra=0},
+    {.major=0x4101, .minor=65, .rssi=-40, .extra=0},
+    {.major=0x4201, .minor=66, .rssi=-40, .extra=0},
+    {.major=0x4301, .minor=67, .rssi=-40, .extra=0},
+    {.major=0x4401, .minor=68, .rssi=-40, .extra=0},
+    {.major=0x4501, .minor=69, .rssi=-40, .extra=0},
+    {.major=0x4601, .minor=70, .rssi=-40, .extra=0},
+    {.major=0x4701, .minor=71, .rssi=-40, .extra=0},
+    {.major=0x4801, .minor=72, .rssi=-40, .extra=0},
+    {.major=0x4901, .minor=73, .rssi=-40, .extra=0},
+    {.major=0x4a01, .minor=74, .rssi=-40, .extra=0},
+    {.major=0x4b01, .minor=75, .rssi=-40, .extra=0},
+    {.major=0x4c01, .minor=76, .rssi=-40, .extra=0},
+    {.major=0x4d01, .minor=77, .rssi=-40, .extra=0},
+    {.major=0x4e01, .minor=78, .rssi=-40, .extra=0},
+    {.major=0x4f01, .minor=79, .rssi=-40, .extra=0},
+    {.major=0x5001, .minor=80, .rssi=-40, .extra=0},
+    {.major=0x5101, .minor=81, .rssi=-40, .extra=0},
+    {.major=0x5201, .minor=82, .rssi=-40, .extra=0},
+    {.major=0x5301, .minor=83, .rssi=-40, .extra=0},
+    {.major=0x5401, .minor=84, .rssi=-40, .extra=0},
+    {.major=0x5501, .minor=85, .rssi=-40, .extra=0},
+    {.major=0x5601, .minor=86, .rssi=-40, .extra=0},
+    {.major=0x5701, .minor=87, .rssi=-40, .extra=0},
+    {.major=0x5901, .minor=88, .rssi=-40, .extra=0},
+    {.major=0x5a01, .minor=89, .rssi=-40, .extra=0},
+    {.major=0x5b01, .minor=90, .rssi=-40, .extra=0},
+    {.major=0x5c01, .minor=91, .rssi=-40, .extra=0},
+    {.major=0x5d01, .minor=92, .rssi=-40, .extra=0},
+    {.major=0x5e01, .minor=93, .rssi=-40, .extra=0},
+    {.major=0x5f01, .minor=94, .rssi=-40, .extra=0},
+    {.major=0x6001, .minor=95, .rssi=-40, .extra=0},
+    {.major=0x6101, .minor=96, .rssi=-40, .extra=0},
+    {.major=0x6201, .minor=97, .rssi=-40, .extra=0},
+    {.major=0x6301, .minor=98, .rssi=-40, .extra=0},
+    {.major=0x6401, .minor=99, .rssi=-40, .extra=0},
+};
+#endif
+
 #define MAX_BLE_TRACKED MYNEWT_VAL(MOD_BLE_MAXIBS_TAG_INZONE)
 
 #define BLE_NTYPES ((BLE_TYPE_COUNTABLE_END-BLE_TYPE_COUNTABLE_START)+1)
@@ -44,8 +205,8 @@ static struct {
 } _ctx = {
     .wbleCtx=NULL,
     .exitTimeoutMins=5,
-    .maxEnterPerUL=10,
-    .maxExitPerUL=10,
+    .maxEnterPerUL=50,
+    .maxExitPerUL=50,
 };
 
 static int findIB(uint16_t maj, uint16_t min) {
@@ -130,10 +291,20 @@ static bool getData(APP_CORE_UL_t* ul) {
     int nbCount=0;
     uint8_t bleErrorMask = 0;
     // No countables seen
-    memset(_ctx.tcount, 0, BLE_NTYPES);
+    memset(&_ctx.tcount[0], 0, sizeof(_ctx.tcount));
 
     uint32_t now = TMMgr_getTime();
+#ifdef TEST_ENTER
+    ibeacon_data_t* iblist = STATIC_TEST_IBLIST_ENTER;   nb = STATIC_TEST_NB; 
+#endif
+#ifdef TEST_COUNT
+    ibeacon_data_t* iblist = STATIC_TEST_IBLIST_COUNT;   nb = STATIC_TEST_NB;
+#endif
+#ifndef TEST_COUNT
+#ifndef TEST_ENTER
     ibeacon_data_t* iblist = wble_getIBList(_ctx.wbleCtx, &nb);
+#endif
+#endif
     if (iblist!=NULL) {
         log_debug("MBT: processing %d BLE", nb);
         // for each one in the new scan list, update the current list, flagging new ones
@@ -212,61 +383,91 @@ static bool getData(APP_CORE_UL_t* ul) {
     }
 
     // Adjust numbers to divide up remaining UL space 'fairly' between enter/exit/types
-    // TODO
-    int nbEnterToAdd = nbEnter;
-    int nbExitToAdd = nbExit;
-    int nbTypesToAdd = nbTypes;
-
+    // how much space would it take (assuming spread over 4 UL packets)
+    int bytesRequired = nbEnter*5 + nbExit*3 + nbTypes*2 + 12;
+    int bytesAvailable = app_core_msg_ul_getTotalSpaceAvailable(ul);
+    // Assume splitting space evenly ie 1/3 each so everyone has same reduction %age if required
+    int percentReduc = (bytesAvailable>bytesRequired) ? 100 : (bytesAvailable*100 / bytesRequired);
+    int nbEnterToAdd = (nbEnter * percentReduc) / 100;
+    int nbExitToAdd = (nbExit * percentReduc) / 100;
+    int nbTypesToAdd = (nbTypes * percentReduc) / 100;
+    log_debug("MBT:br:%d ba:%d pr:%d ne:%d nea:%d",bytesRequired, bytesAvailable, percentReduc, nbEnter, nbEnterToAdd);
     // Now add the appropriate numbers of each element
     if (nbExitToAdd>0) {
-        // TODO deal with case where nbExit is too big for 1 UL and needs split across multiple
-        uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_EXIT, nbExitToAdd*3);
-        if (vp!=NULL) {
-            int nbInMessage = 0;
-            for(int i=0;i<MAX_BLE_TRACKED && nbInMessage<nbExitToAdd;i++) {
-                if ((_ctx.iblist[i].lastSeenAt>0) && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60*1000)) {
+        int nbAdded = 0;
+        uint8_t* vp = NULL;
+        int nbThisUL = 0;
+        for(int i=0;i<MAX_BLE_TRACKED && nbAdded<nbExitToAdd; i++) {
+            if ((_ctx.iblist[i].lastSeenAt>0) && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60*1000)) {
+                if (nbThisUL <= 0) {
+                    // Find space in UL
+                    int bytesInUL = app_core_msg_ul_remainingSz(ul);
+                    // Check if space for TL and 1 ble at least
+                    if (bytesInUL < 5) {
+                        // move to next message and get size (0=no next!)
+                        if ((bytesInUL = app_core_msg_ul_requestNextUL(ul)) <= 0) {
+                            // no more messages, sorry
+                            log_debug("MBN: unexpected no next UL still got %d",(nbExitToAdd-nbAdded));
+                            break;      // from for, we're done here
+                        }
+                    }
+                    nbThisUL = (bytesInUL-2) / 3; 
+                    if (nbThisUL > (nbExitToAdd-nbAdded)) {
+                        // should always give a >0 answer as nbAdded is never >= nbExitToAdd here
+                        nbThisUL = (nbExitToAdd-nbAdded);
+                        assert(nbThisUL>0);
+                    }
+                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_EXIT, nbThisUL*3);
+                }
+                if (vp!=NULL) {
                     // add maj/min to UL 
                     *vp++=(_ctx.iblist[i].ib.major & 0xFF);        // Just LSB of major
                     *vp++ = (_ctx.iblist[i].ib.minor & 0xff);
                     *vp++ = ((_ctx.iblist[i].ib.minor >> 8) & 0xff);
                     // delete from active list
                     _ctx.iblist[i].lastSeenAt=0;
-                    nbInMessage++;
+                    nbAdded++;
+                    nbThisUL--;
+                    if (nbAdded>=nbExitToAdd) {
+                        break;      // added all that we're allowed
+                    }
+
+                } else {
+                    // this should not happen if the previous calculations were correct...
+                    log_debug("MBN: unexpected no space in UL for %d",nbThisUL);
+                    break;
                 }
             }
         }
     }
     // put up to max enter elemnents into UL.
     if (nbEnterToAdd>0) {
-        int nbInThisUL = 0;
+        int nbAdded = 0;
         uint8_t* vp = NULL;
-        for(int i=0;i<MAX_BLE_TRACKED && nbEnterToAdd>0;i++) {
+        int nbThisUL = 0;
+        for(int i=0;i<MAX_BLE_TRACKED && nbAdded<nbEnterToAdd; i++) {
             if (_ctx.iblist[i].new) {
-                // Did we finish with the current UL block?
-                if (vp==NULL) {
-                    // allocate space in UL
-                    nbInThisUL = app_core_msg_ul_remainingSz(ul)/5;
-                    if (nbInThisUL==0) {
-                        // force change to next one and get the size (may be 0)
-                        nbInThisUL = app_core_msg_ul_requestNextUL(ul)/5;
-                    }
-                    // Check if space is greater than we need
-                    if (nbInThisUL > nbEnterToAdd) {
-                        nbInThisUL = nbEnterToAdd;
-                    }
-                    if (nbInThisUL>0) {
-                        vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_ENTER, nbInThisUL*5);
-                        if (vp==NULL) {
-                            // soz
-                            nbEnterToAdd=0;  //done
+                if (nbThisUL <= 0) {
+                    // Find space in UL
+                    int bytesInUL = app_core_msg_ul_remainingSz(ul);
+                    // Check if space for TL and 1 ble at least
+                    if (bytesInUL < 7) {
+                        // move to next message and get size (0=no next!)
+                        if ((bytesInUL = app_core_msg_ul_requestNextUL(ul)) <= 0) {
+                            // no more messages, sorry
+                            log_debug("MBN: unexpected no next UL still got enter %d",(nbEnterToAdd-nbAdded));
+                            break;      // from for, we're done here
                         }
-                    } else {
-                        nbEnterToAdd=0;      // can do no more
                     }
+                    nbThisUL = (bytesInUL-2) / 5; 
+                    if (nbThisUL > (nbEnterToAdd-nbAdded)) {
+                        // should always give a >0 answer as nbAdded is never >= nbEnterToAdd here
+                        nbThisUL = (nbEnterToAdd-nbAdded);
+                        assert(nbThisUL>0);
+                    }
+                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_ENTER, nbThisUL*5);
                 }
                 if (vp!=NULL) {
-                    nbEnterToAdd--;          // one less overall
-                    nbInThisUL--;       // one less in this message
                     // add maj/min to UL 
                     *vp++ = (_ctx.iblist[i].ib.major & 0xFF);        // Just LSB of major
                     *vp++ = (_ctx.iblist[i].ib.minor & 0xff);
@@ -274,31 +475,63 @@ static bool getData(APP_CORE_UL_t* ul) {
                     *vp++ = _ctx.iblist[i].ib.rssi;
                     *vp++ = _ctx.iblist[i].ib.extra;
                     _ctx.iblist[i].new = false;
-                    // If done this UL, set vp to null to try realloc in next one
-                    if (nbInThisUL==0) {
-                        vp=NULL;
+                    nbAdded++;
+                    nbThisUL--;
+                    if (nbAdded>=nbEnterToAdd) {
+                        break;      // added all that we're allowed
                     }
+
+                } else {
+                    // this should not happen if the previous calculations were correct...
+                    log_debug("MBN: no space in UL for enter %d",nbThisUL);
+                    break;
                 }
             }
         }
     }
     // put in types and counts
     if (nbTypesToAdd>0) {
-        // TODO deal with case where nbTypes is too big for 1 UL and needs split across multiple
-        uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_COUNT, 2*nbTypesToAdd);
-        if (vp!=NULL) {
-            for(int i=0;(i<BLE_NTYPES);i++) {
-                if (_ctx.tcount[i]>0) {
+        int nbAdded = 0;
+        uint8_t* vp = NULL;
+        int nbThisUL = 0;
+        for(int i=0;(i<BLE_NTYPES);i++) {
+            if (_ctx.tcount[i]>0) {
+                if (nbThisUL <= 0) {
+                    // Find space in UL
+                    int bytesInUL = app_core_msg_ul_remainingSz(ul);
+                    // Check if space for TL and count at least
+                    if (bytesInUL < 4) {
+                        // move to next message and get size (0=no next!)
+                        if ((bytesInUL = app_core_msg_ul_requestNextUL(ul)) <= 0) {
+                            // no more messages, sorry
+                            log_debug("MBN: unexpected no next UL still got type %d",(nbTypesToAdd-nbAdded));
+                            break;      // from for, we're done here
+                        }
+                    }
+                    nbThisUL = (bytesInUL-2) / 2; 
+                    if (nbThisUL > (nbTypesToAdd-nbAdded)) {
+                        // should always give a >0 answer as nbAdded is never >= nbTypesToAdd here
+                        nbThisUL = (nbTypesToAdd-nbAdded);
+                        assert(nbThisUL>0);
+                    }
+                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_COUNT, nbThisUL*2);
+                }
+                if (vp!=NULL) {
                     *vp++=(BLE_TYPE_COUNTABLE_START+i);
                     *vp++=_ctx.tcount[i];
                     log_debug("MBT: countable tags type %d saw %d", BLE_TYPE_COUNTABLE_START+i, _ctx.tcount[i]);
+                    nbAdded++;
+                    nbThisUL--;
+                    if (nbAdded>=nbTypesToAdd) {
+                        break;      // added all that we're allowed
+                    }
+                } else {
+                    // this should not happen if the previous calculations were correct...
+                    log_debug("MBN: no space in UL for types %d",nbThisUL);
+                    break;
                 }
             }
-        } else {
-            log_debug("MBT: no room in UL for %d countable tag types ", nbTypesToAdd);
         }
-    } else {
-        log_debug("MBT: no countable tags seen");
     }
 /*    if (nbSent>0) {
         // Build CBOR array block first then add to message (as we don't know its size)
@@ -335,8 +568,8 @@ static bool getData(APP_CORE_UL_t* ul) {
     if (bleErrorMask!=0) {
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_ERRORMASK, 1, &bleErrorMask);
     }
-    log_info("MBT:UL enter %d exit %d types %d, err %02x", nbEnter, nbExit, nbCount, bleErrorMask);
-    return (nbEnter>0 || nbExit>0 || nbCount>0 || bleErrorMask!=0);
+    log_info("MBT:UL enter %d/%d exit %d/%d types %d/%d/%d, err %02x", nbEnter, nbEnterToAdd, nbExit, nbExitToAdd, nbCount, nbTypes, nbTypesToAdd, bleErrorMask);
+    return (nbEnterToAdd>0 || nbExitToAdd>0 || nbTypesToAdd>0 || bleErrorMask!=0);
 }
 
 static APP_CORE_API_t _api = {
