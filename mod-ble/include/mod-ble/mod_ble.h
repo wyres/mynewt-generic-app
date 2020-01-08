@@ -24,6 +24,7 @@ extern "C" {
 #define BLE_TYPE_COUNTABLE_START   (0x01)
 #define BLE_TYPE_COUNTABLE_END   (0x7F)
 #define BLE_TYPE_ENTEREXIT   (0x80)
+#define BLE_TYPE_PRESENCE   (0x81)
 
 #ifdef __cplusplus
 }

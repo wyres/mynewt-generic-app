@@ -195,6 +195,7 @@ static struct {
     uint8_t exitTimeoutMins;
     uint8_t maxEnterPerUL;
     uint8_t maxExitPerUL;
+    uint8_t presenceMinorMSB;
     struct {
         ibeacon_data_t ib;
         uint32_t lastSeenAt;
@@ -207,6 +208,7 @@ static struct {
     .exitTimeoutMins=5,
     .maxEnterPerUL=50,
     .maxExitPerUL=50,
+    .presenceMinorMSB=0,
 };
 
 static int findIB(uint16_t maj, uint16_t min) {
@@ -235,8 +237,8 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
         }
         case WBLE_COMM_OK: {
             log_debug("MBT: comm ok");
-            // Scan for both countable and enter/exit types. Note calculation depends on the BLE_TYPExXX values...
-            wble_scan_start(_ctx.wbleCtx, NULL, (BLE_TYPE_COUNTABLE_START<<8), (BLE_TYPE_ENTEREXIT<<8) + 0xFF);
+            // Scan for both countable and enter/exit types. Note calculation of major range depends on the BLE_TYPExXX values being contigous...
+            wble_scan_start(_ctx.wbleCtx, NULL, (BLE_TYPE_COUNTABLE_START<<8), (BLE_TYPE_PRESENCE<<8) + 0xFF);
             break;
         }
         case WBLE_SCAN_RX_IB: {
@@ -251,6 +253,31 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
     }
 }
 
+static bool addOrUpdateList(ibeacon_data_t* ib) {
+    int idx = findIB(ib->major, ib->minor);
+    if (idx<0) {
+        // insert
+        idx = findEmptyIB();
+        if (idx<0) {
+            // poo
+            log_debug("MBT: no space to add new tag");
+            return false;
+        } else {
+            _ctx.iblist[idx].lastSeenAt = TMMgr_getTime();
+            _ctx.iblist[idx].ib.major = ib->major;
+            _ctx.iblist[idx].ib.minor = ib->minor;
+            _ctx.iblist[idx].ib.rssi = ib->rssi;
+            _ctx.iblist[idx].ib.extra = ib->extra;
+            _ctx.iblist[idx].new = true;        // for UL
+        }
+    } else {
+        // update
+        _ctx.iblist[idx].lastSeenAt = TMMgr_getTime();
+        _ctx.iblist[idx].ib.rssi = ib->rssi;
+        _ctx.iblist[idx].ib.extra = ib->extra;
+    }
+    return true;
+}
 // My api functions
 static uint32_t start() {
     // and tell ble to go with a callback to tell me when its got something
@@ -290,10 +317,11 @@ static bool getData(APP_CORE_UL_t* ul) {
     int nbExit=0;
     int nbCount=0;
     uint8_t bleErrorMask = 0;
+    uint32_t now = TMMgr_getTime();
+    
     // No countables seen
     memset(&_ctx.tcount[0], 0, sizeof(_ctx.tcount));
 
-    uint32_t now = TMMgr_getTime();
 #ifdef TEST_ENTER
     ibeacon_data_t* iblist = STATIC_TEST_IBLIST_ENTER;   nb = STATIC_TEST_NB; 
 #endif
@@ -314,28 +342,16 @@ static bool getData(APP_CORE_UL_t* ul) {
                 // ignore, shouldn't happen as the scanner was told to ignore these guys
             } else if (bletype==BLE_TYPE_ENTEREXIT) {
                 // exit/enter type : if new, put as enter in the outgoing message, if not seen for last X minutes, put in the exit list
-                int idx = findIB(iblist[i].major, iblist[i].minor);
-                if (idx<0) {
-                    // insert
-                    idx = findEmptyIB();
-                    if (idx<0) {
-                        // poo
-                        log_debug("MBT: no space to add new tag");
-                        bleErrorMask|=0x01;
-                    } else {
-                        _ctx.iblist[idx].lastSeenAt = now;
-                        _ctx.iblist[idx].ib.major = iblist[i].major;
-                        _ctx.iblist[idx].ib.minor = iblist[i].minor;
-                        _ctx.iblist[idx].ib.rssi = iblist[i].rssi;
-                        _ctx.iblist[idx].ib.extra = iblist[i].extra;
-                        _ctx.iblist[idx].new = true;        // for UL
-                    }
-                } else {
-                    // update
-                    _ctx.iblist[idx].lastSeenAt = now;
-                    _ctx.iblist[idx].ib.rssi = iblist[i].rssi;
-                    _ctx.iblist[idx].ib.extra = iblist[i].extra;
+                if (addOrUpdateList(&iblist[i])==false) {
+                    bleErrorMask|=0x01; 
                 }
+            } else if (bletype==BLE_TYPE_PRESENCE) {
+                // Presence type: we only indicate each time if we see or not the minor set we are looking for
+                if (((iblist[i].minor & 0xff00) >> 8) == _ctx.presenceMinorMSB) {
+                    if (addOrUpdateList(&iblist[i])==false) {
+                        bleErrorMask|=0x01; 
+                    }
+                } // else we don't care about these guys
             } else if (bletype>=BLE_TYPE_COUNTABLE_START && bletype<=BLE_TYPE_COUNTABLE_END) {
                 // countable type : just inc its counter
                 int idx = (bletype - BLE_TYPE_COUNTABLE_START);
@@ -533,6 +549,55 @@ static bool getData(APP_CORE_UL_t* ul) {
             }
         }
     }
+
+    // Presence guys : this is a single TLV (we only track 1 minor block per device)
+    int maxMinorIdPresence = -1;        // to work out if we see any, and if so, the max id seen (to economise space)
+    uint16_t majorPresence=0;         // Normally we expect all presence guys to have same major...
+    for(int i=0;i<MAX_BLE_TRACKED;i++) {
+        // Is this a presence guy
+        if ((((iblist[i].major & 0xff00) >> 8) == BLE_TYPE_PRESENCE) &&
+            (((iblist[i].minor & 0xff00) >> 8) == _ctx.presenceMinorMSB)) {
+            // is he timed out (exited)? (using same timeout as enter/exit case)
+            if ((_ctx.iblist[i].lastSeenAt>0) && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60*1000)) {
+                // Yes, he's not present (and we'll 'delete' him by resetting his lastSeenAt)
+                _ctx.iblist[i].lastSeenAt=0;
+            } else {
+                // He's present
+                uint8_t minorId = (iblist[i].minor & 0xff);     // bit position
+                if (minorId > maxMinorIdPresence) {
+                    maxMinorIdPresence = minorId;
+                }
+                if (majorPresence!=iblist[i].major) {
+                    majorPresence = iblist[i].major;
+                    // Should only happen when set first time...
+                    log_debug("MBT:presence major=%d", majorPresence);
+                }
+            }
+        }
+    }
+    // Ask for space for TLV if we saw any of these guys
+    if (maxMinorIdPresence>=0)  { 
+        uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_PRESENCE, 2+((maxMinorIdPresence/8)+1));
+        *vp++ = (majorPresence & 0xff);
+        *vp++ = _ctx.presenceMinorMSB;
+        for(int i=0;i<MAX_BLE_TRACKED;i++) {
+            // Is this a valid entry, and a presence type, and for the minor range we monitor?
+            if ((_ctx.iblist[i].lastSeenAt>0) &&
+                (((iblist[i].major & 0xff00) >> 8) == BLE_TYPE_PRESENCE) &&
+                (((iblist[i].minor & 0xff00) >> 8) == _ctx.presenceMinorMSB)) {
+                uint8_t minorId = (iblist[i].minor & 0xff);     // bit position
+                if (minorId<=maxMinorIdPresence) {
+                    // set this bit in byte array
+                    vp[minorId/8] |= (1<<(minorId%8));
+                } else {
+                    // never happens? should be assert?
+                    log_warn("MBT:pres:minorid(%d)>maxminor(%d)", minorId, maxMinorIdPresence);
+                }
+            }
+        }
+    }
+
+
 /*    if (nbSent>0) {
         // Build CBOR array block first then add to message (as we don't know its size)
         CborEncoder encoder, blearray;
@@ -568,7 +633,7 @@ static bool getData(APP_CORE_UL_t* ul) {
     if (bleErrorMask!=0) {
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_ERRORMASK, 1, &bleErrorMask);
     }
-    log_info("MBT:UL enter %d/%d exit %d/%d types %d/%d/%d, err %02x", nbEnter, nbEnterToAdd, nbExit, nbExitToAdd, nbCount, nbTypes, nbTypesToAdd, bleErrorMask);
+    log_info("MBT:UL enter %d/%d exit %d/%d types %d/%d/%d, maxPId %d err %02x", nbEnter, nbEnterToAdd, nbExit, nbExitToAdd, nbCount, nbTypes, nbTypesToAdd, maxMinorIdPresence, bleErrorMask);
     return (nbEnterToAdd>0 || nbExitToAdd>0 || nbTypesToAdd>0 || bleErrorMask!=0);
 }
 
@@ -589,6 +654,7 @@ void mod_ble_scan_tag_init(void) {
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_EXIT_TIMEOUT_MINS, &_ctx.exitTimeoutMins, 1, 4*60);
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_MAX_ENTER_PER_UL, &_ctx.maxEnterPerUL, 1, 255);
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_MAX_EXIT_PER_UL, &_ctx.maxExitPerUL, 1, 255);
+    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_PRESENCE_MINOR, &_ctx.presenceMinorMSB, 0, 255);
 
     // hook app-core for ble scan - serialised as competing for UART
     AppCore_registerModule(APP_MOD_BLE_SCAN_TAGS, &_api, EXEC_SERIAL);
