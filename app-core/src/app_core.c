@@ -278,8 +278,8 @@ static SM_STATE_ID_t State_TryJoin(void* arg, int e, void* data) {
             // Stop all leds, and flash fast both to show we're trying join
             ledStart(MYNEWT_VAL(MODS_ACTIVE_LED), FLASH_5HZ, -1);
             ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_5HZ, -1);
-            // Set desired low power mode to be just sleep as console is active for first period
-            LPMgr_setLPMode(ctx->lpUserId, LP_SLEEP);
+            // Set desired low power mode to be just light doze as console is active for first period
+            LPMgr_setLPMode(ctx->lpUserId, LP_DOZE);
             // start join process
             LORAWAN_RESULT_t status = lora_api_join(lora_join_cb, ctx->loraCfg.loraSF, NULL);
             if (status==LORAWAN_RES_JOIN_OK) {
@@ -460,6 +460,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             // LEDs off
             ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
             ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
+//            log_check_uart_active();        // so closes it if no logs being sent - not yet tested removed
             // any low power when not idle will be basic low power MCU (ie with radio and gpios on)
             LPMgr_setLPMode(ctx->lpUserId, LP_DOZE);
             return SM_STATE_CURRENT;
@@ -491,6 +492,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             // else stay here. reset timeout for next check
             sm_timer_start(ctx->mySMId, ctx->idleTimeCheckSecs*1000);
             log_debug("AC:reidle %ds as %d < %d", ctx->idleTimeCheckSecs, dt, idletimeMS);
+//            log_check_uart_active();        // so closes it if no logs being sent - not yet tested removed
             LPMgr_setLPMode(ctx->lpUserId, LP_DEEPSLEEP);
 
             return SM_STATE_CURRENT;
