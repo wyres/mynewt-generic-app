@@ -55,13 +55,13 @@ static struct appctx {
     bool ulIsCrit;              // during data collection, module can signal critical data change ie must send UL
     APP_CORE_UL_t txmsg;        // for building UL messages
     APP_CORE_DL_t rxmsg;        // for decoding DL messages
-    uint32_t lastULTime;        // timestamp of last uplink
+    uint32_t lastULTime;        // timestamp of last uplink in seconds since boot
     uint32_t idleTimeMovingSecs;
     uint32_t idleTimeNotMovingMins;
     uint32_t idleTimeCheckSecs;
     uint32_t modSetupTimeSecs;
-    uint32_t idleStartTS;
-    uint32_t joinStartTS;
+    uint32_t idleStartTS;   // In seconds since epoch
+    uint32_t joinStartTS;   // in seconds since epoch
     uint32_t maxTimeBetweenULMins;
     bool doReboot;
     uint8_t stockMode;
@@ -295,7 +295,7 @@ static SM_STATE_ID_t State_TryJoin(void* arg, int e, void* data) {
                 sm_timer_start(ctx->mySMId, ctx->joinTimeCheckSecs*1000);
                 log_debug("AC:try join : timeout in %d secs", ctx->joinTimeCheckSecs);
                 // Record time
-                ctx->joinStartTS = TMMgr_getRelTime();
+                ctx->joinStartTS = TMMgr_getRelTimeSecs();
             }
             return SM_STATE_CURRENT;
         }
@@ -346,7 +346,7 @@ static SM_STATE_ID_t State_Stock(void* arg, int e, void* data) {
         case SM_ENTER: {
             log_debug("AC:stock forever");
             // Record time
-            ctx->idleStartTS = TMMgr_getRelTime();
+            ctx->idleStartTS = TMMgr_getRelTimeSecs();
             // LEDs off, we are sleeping
             ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
             ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
@@ -447,7 +447,7 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
             sm_timer_start(ctx->mySMId, ctx->idleTimeCheckSecs*1000);
             log_debug("AC:idle %d secs", ctx->idleTimeCheckSecs);
             // Record time
-            ctx->idleStartTS = TMMgr_getRelTime();
+            ctx->idleStartTS = TMMgr_getRelTimeSecs();
             // LEDs off, we are deeply sleeping
             ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
             ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
@@ -478,20 +478,20 @@ static SM_STATE_ID_t State_Idle(void* arg, int e, void* data) {
 
             // calculate timeout -> did we move? deal with difference between moving and not moving times
             MMMgr_check();      // check hardware
-            uint32_t idletimeMS = ctx->idleTimeNotMovingMins * 60000;
+            uint32_t idletimeS = ctx->idleTimeNotMovingMins * 60;
             // check if has moved recently and use different timeout
             if (MMMgr_hasMovedSince(ctx->lastULTime)) {
-                log_debug("AC:moved since last UL %d secs ago", (TMMgr_getRelTime() - MMMgr_getLastMovedTime())/1000);
-                idletimeMS = ctx->idleTimeMovingSecs*1000;
+                log_debug("AC:moved since last UL %d secs ago", (TMMgr_getRelTimeSecs() - MMMgr_getLastMovedTime()));
+                idletimeS = ctx->idleTimeMovingSecs;
             }
-            idletimeMS -= 1000;     // adjust by 1s to get run if 'close' to timeout
-            uint32_t dt = TMMgr_getRelTime() - ctx->idleStartTS;
-            if (dt >= idletimeMS) {
+            idletimeS -= 1;     // adjust by 1s to get run if 'close' to timeout
+            uint32_t dt = TMMgr_getRelTimeSecs() - ctx->idleStartTS;
+            if (dt >= idletimeS) {
                 return MS_GETTING_SERIAL_MODS;
             }
             // else stay here. reset timeout for next check
             sm_timer_start(ctx->mySMId, ctx->idleTimeCheckSecs*1000);
-            log_debug("AC:reidle %ds as %d < %d", ctx->idleTimeCheckSecs, dt, idletimeMS);
+            log_debug("AC:reidle %ds as %d < %d", ctx->idleTimeCheckSecs, dt, idletimeS);
 //            log_check_uart_active();        // so closes it if no logs being sent - not yet tested removed
             LPMgr_setLPMode(ctx->lpUserId, LP_DEEPSLEEP);
 
@@ -653,7 +653,7 @@ static SM_STATE_ID_t State_GettingParallelMods(void* arg, int e, void* data) {
                 }
             }
             // critical to send it if been a while since last one
-            ctx->ulIsCrit |= ((TMMgr_getRelTime() - ctx->lastULTime) > (ctx->maxTimeBetweenULMins*60000));
+            ctx->ulIsCrit |= ((TMMgr_getRelTimeSecs() - ctx->lastULTime) > (ctx->maxTimeBetweenULMins*60));
             if (ctx->ulIsCrit) {
                 return MS_SENDING_UL;
             } else {            
@@ -673,7 +673,7 @@ static LORA_TX_RESULT_t tryTX(struct appctx* ctx, bool willListen) {
     LORA_TX_RESULT_t res = LORA_TX_ERR_RETRY;
     if (txsz>0) {
         LORAWAN_RESULT_t txres = lora_api_send(ctx->loraCfg.loraSF, ctx->loraCfg.txPort, ctx->loraCfg.useAck, willListen, 
-                &(ctx->txmsg.msgs[ctx->txmsg.msbNbTxing].payload[0]), txsz, lora_tx_cb, ctx);
+                app_core_msg_ul_getTxPayload(&ctx->txmsg), txsz, lora_tx_cb, ctx);
         if (txres==LORAWAN_RES_OK) {
             res = LORA_TX_OK;
             log_info("AC:UL tx req SF %d, ack %d, listen %d, sz %d", ctx->loraCfg.loraSF,ctx->loraCfg.useAck, willListen,txsz);
@@ -736,12 +736,18 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
             switch (res) {
                 case LORA_TX_OK_ACKD: {
                     log_info("AC:tx : ACKD");
-                    ctx->lastULTime = TMMgr_getRelTime();
+                    ctx->lastULTime = TMMgr_getRelTimeSecs();
                     break;
                 }
                 case LORA_TX_OK: {
                     log_info("AC:tx : OK");
-                    ctx->lastULTime = TMMgr_getRelTime();
+                    ctx->lastULTime = TMMgr_getRelTimeSecs();
+                    break;
+                }
+                case LORA_TX_ERR_RETRY: {
+                    log_warn("AC:tx : fail:retry");
+                    // Step back one in ULs so that next tryTx gets same one to retry
+// TODO                    app_core_msg_ul_retry(&ctx->txmsg);
                     break;
                 }
                 case LORA_TX_ERR_NOTJOIN: {
@@ -773,6 +779,7 @@ static SM_STATE_ID_t State_SendingUL(void* arg, int e, void* data) {
                 return SM_STATE_CURRENT;
             } else {
                 log_debug("AC:lora tx UL res %d, going idle", res);
+                // TODO - if a ERR_RETRY, then get any unsent ULs and keep for next time to retry???? or have explicit state?
                 // And we're done
                 return MS_IDLE;
             }
@@ -953,13 +960,13 @@ ACTIONFN_t AppCore_findAction(uint8_t id) {
     return NULL;
 }
 
-// Last UL sent time (relative, ms)
+// Last UL sent time (relative, seconds)
 uint32_t AppCore_lastULTime() {
     return _ctx.lastULTime;
 }
 // Time in ms to next UL
 uint32_t AppCore_getTimeToNextUL() {
-    return TMMgr_getRelTime() - _ctx.idleStartTS;
+    return TMMgr_getRelTimeSecs() - _ctx.idleStartTS;
 }
 // Request stop idle and goto UL phase now
 // optionally request 'fast' UL ie just 1 module to let do data collection
@@ -1087,8 +1094,8 @@ static void A_flashled2(uint8_t* v, uint8_t l) {
 static void A_settime(uint8_t* v, uint8_t l) {
     log_info("AC:action SETTIME");
     uint32_t now = Util_readLE_uint32_t(v, l);
-    // boot time in UTC is now - time elapsed since boot
-    TMMgr_setBootTime(now - TMMgr_getRelTime());
+    // boot time in UTC seconds is now - time elapsed since boot
+    TMMgr_setBootTime(now - TMMgr_getRelTimeSecs());
 }
 // Return state of modules?
 static void A_getmods(uint8_t* v, uint8_t l) {

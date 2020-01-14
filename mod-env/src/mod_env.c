@@ -31,7 +31,7 @@
 // Send debug data at startup twice
 #define NB_REBOOT_INFOS (2)
 // Force uplink with env data every hour?
-#define FORCE_UL_INTERVAL_MS (60*60*1000)
+#define FORCE_UL_INTERVAL_S (60*60)
 // COntext data
 static struct appctx {
     uint8_t sentRebootInfo;
@@ -69,7 +69,7 @@ static bool getData(APP_CORE_UL_t* ul) {
     log_info("ME: UL env");
     // Decide if gonna force the UL to include current values and to be sent. 
     // TODO note this essentially override the 'max time between UL' setting in the appcore code
-    bool forceULData = ((TMMgr_getRelTime() - AppCore_lastULTime()) > FORCE_UL_INTERVAL_MS);
+    bool forceULData = ((TMMgr_getRelTimeSecs() - AppCore_lastULTime()) > FORCE_UL_INTERVAL_S);
     // if first N times after reboot, add reboot info
     if (_ctx.sentRebootInfo >0) {
         _ctx.sentRebootInfo--;
@@ -185,7 +185,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_ADC2, sizeof(v), v);
     }
     // get micro if noise detected
-    if (forceULData || SRMgr_getLastNoiseTime() >= AppCore_lastULTime()) {
+    if (forceULData || SRMgr_getLastNoiseTimeSecs() >= AppCore_lastULTime()) {
         uint8_t v[6];
         /* equivalent structure but we explicitly pack our data
         struct {
@@ -194,14 +194,14 @@ static bool getData(APP_CORE_UL_t* ul) {
             uint8_t leveldB;
         } v;
         */
-        Util_writeLE_uint32_t(v, 0, SRMgr_getLastNoiseTime());
+        Util_writeLE_uint32_t(v, 0, SRMgr_getLastNoiseTimeSecs());
         v[4] = SRMgr_getNoiseFreqkHz();
         v[5] = SRMgr_getNoiseLeveldB();
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_NOISE, sizeof(v), v);
     }
 
     // get button
-    if (forceULData || SRMgr_getLastButtonPressTS() >= AppCore_lastULTime()) {
+    if (forceULData || ((SRMgr_getLastButtonPressTS()/1000) >= AppCore_lastULTime())) {
         uint8_t v[10];
         /* equivalent structure but we explicitly pack our data
         struct {

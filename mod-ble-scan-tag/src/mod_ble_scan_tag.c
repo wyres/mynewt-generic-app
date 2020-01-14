@@ -198,7 +198,7 @@ static struct {
     uint8_t presenceMinorMSB;
     struct {
         ibeacon_data_t ib;
-        uint32_t lastSeenAt;
+        uint32_t lastSeenAt;        // In seconds since boot
         bool new;
     } iblist[MAX_BLE_TRACKED];
     uint8_t tcount[BLE_NTYPES];
@@ -263,7 +263,7 @@ static bool addOrUpdateList(ibeacon_data_t* ib) {
             log_debug("MBT: no space to add new tag");
             return false;
         } else {
-            _ctx.iblist[idx].lastSeenAt = TMMgr_getTime();
+            _ctx.iblist[idx].lastSeenAt = TMMgr_getRelTimeSecs();
             _ctx.iblist[idx].ib.major = ib->major;
             _ctx.iblist[idx].ib.minor = ib->minor;
             _ctx.iblist[idx].ib.rssi = ib->rssi;
@@ -272,7 +272,7 @@ static bool addOrUpdateList(ibeacon_data_t* ib) {
         }
     } else {
         // update
-        _ctx.iblist[idx].lastSeenAt = TMMgr_getTime();
+        _ctx.iblist[idx].lastSeenAt = TMMgr_getRelTimeSecs();
         _ctx.iblist[idx].ib.rssi = ib->rssi;
         _ctx.iblist[idx].ib.extra = ib->extra;
     }
@@ -317,7 +317,7 @@ static bool getData(APP_CORE_UL_t* ul) {
     int nbExit=0;
     int nbCount=0;
     uint8_t bleErrorMask = 0;
-    uint32_t now = TMMgr_getTime();
+    uint32_t now = TMMgr_getRelTimeSecs();
     
     // No countables seen
     memset(&_ctx.tcount[0], 0, sizeof(_ctx.tcount));
@@ -372,7 +372,7 @@ static bool getData(APP_CORE_UL_t* ul) {
     // Count them first to allocate space in UL
     for(int i=0;i<MAX_BLE_TRACKED;i++) {
         // lastSeenAt==0 -> unused entry
-        if ((_ctx.iblist[i].lastSeenAt>0) && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60*1000)) {
+        if ((_ctx.iblist[i].lastSeenAt>0) && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60)) {
             nbExit++;
         }
     }
@@ -414,7 +414,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         uint8_t* vp = NULL;
         int nbThisUL = 0;
         for(int i=0;i<MAX_BLE_TRACKED && nbAdded<nbExitToAdd; i++) {
-            if ((_ctx.iblist[i].lastSeenAt>0) && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60*1000)) {
+            if ((_ctx.iblist[i].lastSeenAt>0) && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60)) {
                 if (nbThisUL <= 0) {
                     // Find space in UL
                     int bytesInUL = app_core_msg_ul_remainingSz(ul);
@@ -558,7 +558,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         if ((((iblist[i].major & 0xff00) >> 8) == BLE_TYPE_PRESENCE) &&
             (((iblist[i].minor & 0xff00) >> 8) == _ctx.presenceMinorMSB)) {
             // is he timed out (exited)? (using same timeout as enter/exit case)
-            if ((_ctx.iblist[i].lastSeenAt>0) && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60*1000)) {
+            if ((_ctx.iblist[i].lastSeenAt>0) && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60)) {
                 // Yes, he's not present (and we'll 'delete' him by resetting his lastSeenAt)
                 _ctx.iblist[i].lastSeenAt=0;
             } else {

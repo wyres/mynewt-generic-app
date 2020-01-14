@@ -37,6 +37,8 @@ static struct appctx {
     .goodFix.rxAt=0,
 };
 
+static void logGPSPosition(gps_data_t* pos);
+
 static void gps_cb(GPS_EVENT_TYPE_t e) {
     switch(e) {
         case GPS_COMM_FAIL: {
@@ -156,6 +158,8 @@ static bool getData(APP_CORE_UL_t* ul) {
     if (_ctx.goodFixCnt>0 && _ctx.goodFix.rxAt!=0) {
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_GPS, sizeof(gps_data_t), &_ctx.goodFix);
         log_info("MG: UL fix %d,%d,%d p=%d from %d sats", _ctx.goodFix.lat, _ctx.goodFix.lon, _ctx.goodFix.alt, _ctx.goodFix.prec, _ctx.goodFix.nSats);
+        // Log this position with timestamp (can be retrieved with DL action)
+        logGPSPosition(&_ctx.goodFix);
         return true;
     } else {
         log_info("MG: no fix for UL");
@@ -188,4 +192,12 @@ void mod_gps_init(void) {
     // Register for the gps action(s)
     AppCore_registerAction(APP_CORE_DL_FIX_GPS, &A_fixgps);
 //    log_debug("mod-gps inited");
+}
+
+static void logGPSPosition(gps_data_t* pos) {
+    // Store position in circular buffer in config (for easy access)
+    // Add new fix with timestamp
+    // use delta from last values, code with CBOR?
+//    LGMgr_addElement(LOGGING_KEY_GPS, pos);
+
 }

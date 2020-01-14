@@ -79,8 +79,19 @@ uint8_t app_core_msg_ul_requestNextUL(APP_CORE_UL_t* ul);
  * get total space available cumulated in al the remaining UL messages available
  */
 uint8_t app_core_msg_ul_getTotalSpaceAvailable(APP_CORE_UL_t* ul);
-
+/*
+ * Step back 1 in current tx set to allow next finalise call to resend it 
+ */
+void app_core_msg_ul_retry(APP_CORE_UL_t* ul);
+/* 
+ * finalise next UL tx message (header etc) ready for tx
+ */
 uint8_t app_core_msg_ul_finalise(APP_CORE_UL_t* msg, uint8_t lastDLId, bool willListen);
+/*
+ * Get pointer to payload for current 'to tx' message
+ */
+uint8_t* app_core_msg_ul_getTxPayload(APP_CORE_UL_t* ul);
+
 void app_core_msg_dl_init(APP_CORE_DL_t* msg);
 bool app_core_msg_dl_decode(APP_CORE_DL_t* msg);
 bool app_core_msg_dl_execute(APP_CORE_DL_t* msg);

@@ -111,6 +111,13 @@ uint8_t app_core_msg_ul_requestNextUL(APP_CORE_UL_t* ul) {
     return (APP_CORE_UL_MAX_SZ - ul->msgs[ul->msgNbFilling].sz);
 }
 
+// Step back a UL message in the current tx set so that next call to finalise will retry it
+void app_core_msg_ul_retry(APP_CORE_UL_t* ul) {
+    if (ul->msbNbTxing>0) {
+        ul->msbNbTxing--;
+    }
+}
+
 // return the size of the final UL
 uint8_t app_core_msg_ul_finalise(APP_CORE_UL_t* ul, uint8_t lastDLId, bool willListen) {
     uint8_t ret = 0;
@@ -130,6 +137,10 @@ uint8_t app_core_msg_ul_finalise(APP_CORE_UL_t* ul, uint8_t lastDLId, bool willL
         // Must have msgNbTxing pointing to the message we have finalised
     } // else we're done tx 
     return ret;
+}
+// Get pointer to payload for current 'to tx' message
+uint8_t* app_core_msg_ul_getTxPayload(APP_CORE_UL_t* ul) {
+    return &(ul->msgs[ul->msbNbTxing].payload[0]);
 }
 
 void app_core_msg_dl_init(APP_CORE_DL_t* dl) {
