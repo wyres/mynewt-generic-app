@@ -20,6 +20,7 @@
 #include "wyres-generic/wconsole.h"
 #include "wyres-generic/configmgr.h"
 #include "wyres-generic/timemgr.h"
+#include "wyres-generic/movementmgr.h"
 #include "wyres-generic/sensormgr.h"
 #include "loraapi/loraapi.h"
 
@@ -312,6 +313,24 @@ static ATRESULT atcmd_info(uint8_t nargs, char* argv[]) {
     SRMgr_stop();
     return ATCMD_OK;
 }
+static ATRESULT atcmd_selftest(uint8_t nargs, char* argv[]) {
+    // check hw elements
+    // flash/eeprom ok or would not have started
+    APP_CORE_FW_t* fwinfo = AppCore_getFwInfo();
+    wconsole_println("FW:%s, v%d/%d.%d @%s", fwinfo->fwname, fwinfo->fwmaj, fwinfo->fwmin, fwinfo->fwbuild, fwinfo->fwdate);
+    // Check altimeter/battery/temp are 'reasonable'
+    SRMgr_start();
+    // delay a little
+    // check accelero  
+    wconsole_println("ACCEL:%s", (MMMgr_check())?"OK":"NOK");
+    // ? SX1272?
+    wconsole_println("BATT[%d]:%s",SRMgr_getBatterymV(), (SRMgr_getBatterymV()>2000 && SRMgr_getBatterymV()<4000)?"OK":"NOK");
+    wconsole_println("ALTI[%d]:%s", SRMgr_getPressurePa(), (SRMgr_getPressurePa()>90000 && SRMgr_getPressurePa()<120000)?"OK":"NOK");
+    wconsole_println("TEMP[%d]:%s", SRMgr_getTempdC(), (SRMgr_getTempdC()>-4000 && SRMgr_getTempdC()<9000)?"OK":"NOK");
+    SRMgr_stop();
+    return ATCMD_OK;
+}
+    
 static ATCMD_DEF_t ATCMDS[] = {
     { .cmd="AT", .desc="Wakeup", atcmd_hello},
     { .cmd="AT+HELLO", .desc="Wakeup", atcmd_hello},
@@ -320,6 +339,7 @@ static ATCMD_DEF_t ATCMDS[] = {
     { .cmd="AT?", .desc="List commands", atcmd_listcmds},
     { .cmd="ATZ", .desc="Reset card", atcmd_reset},
     { .cmd="AT+INFO", .desc="Show info", atcmd_info},
+    { .cmd="AT+ST", .desc="HW self test", atcmd_selftest},
     { .cmd="AT+GETCFG", .desc="Show config", atcmd_getcfg},
     { .cmd="AT&V", .desc="Show config", atcmd_getcfg},
     { .cmd="AT+SETCFG", .desc="Set config", atcmd_setcfg},

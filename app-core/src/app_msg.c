@@ -37,7 +37,7 @@ static bool evenParity(uint8_t d) {
 void app_core_msg_ul_init(APP_CORE_UL_t* ul) {
     memset(ul, 0, sizeof(APP_CORE_UL_t));
     ul->msgNbFilling=0;     // which message are we currently filling in?
-    ul->msbNbTxing=-1;      // which message are we currently txing: -1as we inc in finalise before starting
+    ul->msbNbTxing=-1;      // which message are we currently txing: -1as we inc in prepareNextTx before starting
     ul->msgs[ul->msgNbFilling].sz = 2;     // skip header which we add later
 }
 // Add TLV into payload if possible
@@ -111,15 +111,16 @@ uint8_t app_core_msg_ul_requestNextUL(APP_CORE_UL_t* ul) {
     return (APP_CORE_UL_MAX_SZ - ul->msgs[ul->msgNbFilling].sz);
 }
 
-// Step back a UL message in the current tx set so that next call to finalise will retry it
+// Step back a UL message in the current tx set so that next call to prepareNextTx will retry it
 void app_core_msg_ul_retry(APP_CORE_UL_t* ul) {
-    if (ul->msbNbTxing>0) {
+    // we set the 'currently txing' index to 1 less so that the next call to prepareNext will get the same one (as it incs the index)
+    if (ul->msbNbTxing>-1) {
         ul->msbNbTxing--;
     }
 }
 
-// return the size of the final UL
-uint8_t app_core_msg_ul_finalise(APP_CORE_UL_t* ul, uint8_t lastDLId, bool willListen) {
+// Prepare next tx msg (header etc) and return the size of the final UL
+uint8_t app_core_msg_ul_prepareNextTx(APP_CORE_UL_t* ul, uint8_t lastDLId, bool willListen) {
     uint8_t ret = 0;
     ul->msbNbTxing++;
     if (ul->msbNbTxing<APP_CORE_UL_MAX_NB) {

@@ -669,7 +669,7 @@ static SM_STATE_ID_t State_GettingParallelMods(void* arg, int e, void* data) {
     assert(0);      // shouldn't get here
 }
 static LORA_TX_RESULT_t tryTX(struct appctx* ctx, bool willListen) {
-    uint8_t txsz = app_core_msg_ul_finalise(&ctx->txmsg, ctx->lastDLId, willListen);
+    uint8_t txsz = app_core_msg_ul_prepareNextTx(&ctx->txmsg, ctx->lastDLId, willListen);
     LORA_TX_RESULT_t res = LORA_TX_ERR_RETRY;
     if (txsz>0) {
         LORAWAN_RESULT_t txres = lora_api_send(ctx->loraCfg.loraSF, ctx->loraCfg.txPort, ctx->loraCfg.useAck, willListen, 

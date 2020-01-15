@@ -38,7 +38,7 @@ typedef struct {
         uint8_t sz;
     } msgs[APP_CORE_UL_MAX_NB];
     uint8_t msgNbFilling;
-    uint8_t msbNbTxing;
+    int8_t msbNbTxing;      // Starts at -1 to indicate not yet in tx phase
 } APP_CORE_UL_t;
 
 // First 2 bytes are header, then 'actions'
@@ -86,7 +86,7 @@ void app_core_msg_ul_retry(APP_CORE_UL_t* ul);
 /* 
  * finalise next UL tx message (header etc) ready for tx
  */
-uint8_t app_core_msg_ul_finalise(APP_CORE_UL_t* msg, uint8_t lastDLId, bool willListen);
+uint8_t app_core_msg_ul_prepareNextTx(APP_CORE_UL_t* msg, uint8_t lastDLId, bool willListen);
 /*
  * Get pointer to payload for current 'to tx' message
  */
