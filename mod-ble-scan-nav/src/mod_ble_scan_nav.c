@@ -24,15 +24,19 @@
 #include "mod-ble/mod_ble.h"
 
 // How many ibeacons will we deal with?
-#define MAX_BLE_CURR MYNEWT_VAL(MOD_BLE_MAXIBS_NAV)
+// Keep history between scans of this number
+#define MAX_BLE_TOSCAN  (16)     
+// Max number we send up (the 'best' rssi ones)
+#define MAX_BLE_TOSEND MYNEWT_VAL(MOD_BLE_MAXIBS_NAV)
+// how long till we through them out of history?
+#define NAX_BEACON_TIMEOUT_SECS (60)
+
 static struct {
     void* wbleCtx;
     uint8_t maxNavPerUL;
-    ibeacon_data_t iblist[MAX_BLE_CURR];
-} _ctx = {
-    .wbleCtx=NULL,
-    .maxNavPerUL = MAX_BLE_CURR,
-};
+    ibeacon_data_t iblist[MAX_BLE_TOSCAN];
+    ibeacon_data_t bestiblist[MAX_BLE_TOSEND];
+} _ctx;     // inited to 0 by definition
 
 /** callback fns from BLE generic package */
 static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
@@ -44,7 +48,7 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
         case WBLE_COMM_OK: {
             log_debug("MBN: comm ok");
             // Scan selecting only majors between 0x0000 and 0x00FF ie short range
-            wble_scan_start(_ctx.wbleCtx, NULL, (BLE_TYPE_NAV<<8), ((BLE_TYPE_NAV<<8)+0xFF));
+            wble_scan_start(_ctx.wbleCtx, NULL, (BLE_TYPE_NAV<<8), ((BLE_TYPE_NAV<<8)+0xFF), MAX_BLE_TOSCAN, &_ctx.iblist[0]);
             break;
         }
         case WBLE_SCAN_RX_IB: {
@@ -73,6 +77,8 @@ static uint32_t start() {
 static void stop() {
     // Done BLE, go idle
     wble_scan_stop(_ctx.wbleCtx);
+    // clean up list for any we haven't seen for a while
+    wble_resetList(_ctx.wbleCtx, MAX_BEACON_TIMEOUT_SECS);
     // and power down 
     wble_stop(_ctx.wbleCtx);
 }
@@ -89,7 +95,7 @@ static bool getData(APP_CORE_UL_t* ul) {
     // - 'mobile tag' type : may congregate in areas so we see a lot of them. In this case, we do in/out notifications
     // This module is concerned with the fixed navigation ones - we sent up a short 'best rsssi' list every time
     // Get list of ibs in order into this array please
-    int nbSent = wble_getSortedIBList(_ctx.wbleCtx, MAX_BLE_CURR, _ctx.iblist);
+    int nbSent = wble_getSortedIBList(_ctx.wbleCtx, MAX_BLE_TOSEND, _ctx.bestiblist);
     if (nbSent>0) {
         if (nbSent>_ctx.maxNavPerUL) {
             nbSent = _ctx.maxNavPerUL;      // can limit to less than the max
@@ -98,13 +104,13 @@ static bool getData(APP_CORE_UL_t* ul) {
         uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_CURR,nbSent*5);
         if (vp!=NULL) {
             for(int i=0;i<nbSent;i++) {
-                *vp++ = (_ctx.iblist[i].major & 0xff);
+                *vp++ = (_ctx.bestiblist[i].major & 0xff);
                 // no point in sending up MSB of major, not used in id
-//                *vp++ = ((_ctx.iblist[i].major >> 8) & 0xff);
-                *vp++ = (_ctx.iblist[i].minor & 0xff);
-                *vp++ = ((_ctx.iblist[i].minor >> 8) & 0xff);
-                *vp++ = _ctx.iblist[i].rssi;
-                *vp++ = _ctx.iblist[i].extra;
+//                *vp++ = ((_ctx.bestiblist[i].major >> 8) & 0xff);
+                *vp++ = (_ctx.bestiblist[i].minor & 0xff);
+                *vp++ = ((_ctx.bestiblist[i].minor >> 8) & 0xff);
+                *vp++ = _ctx.bestiblist[i].rssi;
+                *vp++ = _ctx.bestiblist[i].extra;
             }
         }
     }
@@ -122,6 +128,9 @@ static APP_CORE_API_t _api = {
 };
 // Initialise module
 void mod_ble_scan_nav_init(void) {
+    // _ctx initied to 0 by definition (bss). Set any non-0 defaults here
+    _ctx.maxNavPerUL = MAX_BLE_CURR;
+
     // initialise access
     _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
 

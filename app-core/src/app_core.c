@@ -117,7 +117,7 @@ static struct appctx {
       .deveui = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
       .appkey = {0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00, 0x00},
     },
-};
+};      // Although _ctx is 0'd by definition (bss) we set non-0 init values here as there are a lot...
 
 typedef enum { LORA_TX_OK, LORA_TX_OK_ACKD, LORA_TX_ERR_RETRY, LORA_TX_ERR_FATAL, LORA_TX_ERR_NOTJOIN, LORA_TX_NO_TX } LORA_TX_RESULT_t;
 
@@ -352,6 +352,13 @@ static SM_STATE_ID_t State_Stock(void* arg, int e, void* data) {
             ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
             // and stay idle in deep sleep this time
             LPMgr_setLPMode(ctx->lpUserId, LP_OFF);
+            
+            // close logging uart if active
+            log_deinit_uart();
+
+            // function that puts the device in full stop/reboot mode with the only exit possible being POR or NRST pin
+            hal_bsp_halt();
+            // not expected to return here
             return SM_STATE_CURRENT;
         }
         case SM_EXIT: {

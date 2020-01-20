@@ -36,10 +36,8 @@
 static struct appctx {
     uint8_t sentRebootInfo;
     int32_t pressureOffsetPa;
-} _ctx = {
-    .sentRebootInfo=NB_REBOOT_INFOS,
-    .pressureOffsetPa=0,
-};
+} _ctx; // all 0 bybss def
+
 static void buttonChangeCB(void* ctx, SR_BUTTON_STATE_t currentState, SR_BUTTON_PRESS_TYPE_t currentPressType);
 static void A_getdebug(uint8_t* v, uint8_t l);
 
@@ -230,6 +228,9 @@ static APP_CORE_API_t _api = {
 };
 // Initialise module
 void mod_env_init(void) {
+    // _ctx is 0'd by bss def, set non-0 defaults here
+    _ctx.sentRebootInfo=NB_REBOOT_INFOS;
+
     // Sensor initialisation
     // Altimeter offset calibration
     // Read reference pressure (set by testbed production) in PASCALS. Note if its 0 this means no calibration this time.
