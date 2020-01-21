@@ -29,7 +29,7 @@
 // Max number we send up (the 'best' rssi ones)
 #define MAX_BLE_TOSEND MYNEWT_VAL(MOD_BLE_MAXIBS_NAV)
 // how long till we through them out of history?
-#define NAX_BEACON_TIMEOUT_SECS (60)
+#define MAX_BEACON_TIMEOUT_SECS (60)
 
 static struct {
     void* wbleCtx;
@@ -114,7 +114,7 @@ static bool getData(APP_CORE_UL_t* ul) {
             }
         }
     }
-    log_info("MBN:UL saw %d sent best %d", wble_getNbIB(_ctx.wbleCtx), nbSent);
+    log_info("MBN:UL saw %d sent best %d", wble_getNbIBActive(_ctx.wbleCtx, 0), nbSent);
     return (nbSent>0);
 }
 
@@ -129,7 +129,7 @@ static APP_CORE_API_t _api = {
 // Initialise module
 void mod_ble_scan_nav_init(void) {
     // _ctx initied to 0 by definition (bss). Set any non-0 defaults here
-    _ctx.maxNavPerUL = MAX_BLE_CURR;
+    _ctx.maxNavPerUL = MAX_BLE_TOSEND;
 
     // initialise access
     _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
@@ -138,8 +138,8 @@ void mod_ble_scan_nav_init(void) {
     // Validate value is ok to avoid issues...
     if (_ctx.maxNavPerUL==0) {
         _ctx.maxNavPerUL= 1;        // No point in enabling the module if not gonna send at least 1!
-    } else if (_ctx.maxNavPerUL>MAX_BLE_CURR) {
-        _ctx.maxNavPerUL= MAX_BLE_CURR;
+    } else if (_ctx.maxNavPerUL>MAX_BLE_TOSEND) {
+        _ctx.maxNavPerUL= MAX_BLE_TOSEND;
     }
 
     // hook app-core for ble scan - serialised as competing for UART
