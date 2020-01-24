@@ -540,6 +540,9 @@ static bool getData(APP_CORE_UL_t* ul) {
                 }
             }
         }
+    } else {
+        // add empty TLV to signal we scanned but didnt see them
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_COUNT, 0, NULL);
     }
 
     // Ask for space for TLV if we see any presence guys as active
@@ -562,6 +565,9 @@ static bool getData(APP_CORE_UL_t* ul) {
                 }
             }
         }
+    } else {
+        // add empty TLV to signal we scanned but didnt see them
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_PRESENCE, 0, NULL);
     }
 
 
@@ -601,7 +607,8 @@ static bool getData(APP_CORE_UL_t* ul) {
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_ERRORMASK, 1, &bleErrorMask);
     }
     log_info("MBT:UL enter %d/%d exit %d/%d types %d/%d/%d, maxPId %d err %02x", nbEnter, nbEnterToAdd, nbExit, nbExitToAdd, nbCount, nbTypes, nbTypesToAdd, maxMinorIdPresence, bleErrorMask);
-    return (nbEnterToAdd>0 || nbExitToAdd>0 || nbTypesToAdd>0 || bleErrorMask!=0);
+//    return (nbEnterToAdd>0 || nbExitToAdd>0 || nbTypesToAdd>0 || bleErrorMask!=0);
+    return true;        // always gotta send UL as 'no BLEs seen' is also important!
 }
 
 static APP_CORE_API_t _api = {

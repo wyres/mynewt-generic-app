@@ -57,9 +57,12 @@ bool app_core_msg_ul_addTLV(APP_CORE_UL_t* ul, uint8_t t, uint8_t l, void* v) {
     }
     ul->msgs[ul->msgNbFilling].payload[ul->msgs[ul->msgNbFilling].sz++] = t;
     ul->msgs[ul->msgNbFilling].payload[ul->msgs[ul->msgNbFilling].sz++] = l;
-    uint8_t* vd = (uint8_t*)v;
-    for(int i=0;i<l;i++) {
-        ul->msgs[ul->msgNbFilling].payload[ul->msgs[ul->msgNbFilling].sz++] = vd[i];
+    if (l>0) {
+        assert(v!=NULL);
+        uint8_t* vd = (uint8_t*)v;
+        for(int i=0;i<l;i++) {
+            ul->msgs[ul->msgNbFilling].payload[ul->msgs[ul->msgNbFilling].sz++] = vd[i];
+        }
     }
     return true;
 }

@@ -84,16 +84,17 @@ static bool getData(APP_CORE_UL_t* ul) {
         // firmware version, build date
         APP_CORE_FW_t* fw = AppCore_getFwInfo();
         // Only sending up the minimum
-        uint8_t v[3];
+        uint8_t v[4];
         /* equivalent structure but we explicitly pack our data
         struct {
             uint8_t maj;
             uint8_t min;
-            uint8_t build;
+            uint16_t buildNb;
         } */
         v[0] = (uint8_t)(fw->fwmaj);
         v[1] = (uint8_t)(fw->fwmin);
-        v[2] = (uint8_t)(fw->fwbuild);
+        v[2] = (uint8_t)(fw->fwbuild & 0xff);
+        v[3] = (uint8_t)((fw->fwbuild & 0xff00) >> 8);
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_VERSION, sizeof(v), v);
         forceULData = true;     // as we sent debug
     }

@@ -113,9 +113,15 @@ static bool getData(APP_CORE_UL_t* ul) {
                 *vp++ = _ctx.bestiblist[i].extra;
             }
         }
+        // Set a global flag so gps knows we saw 'indoor' type localisation stuff
+        // TODO
+    } else {
+        // add empty TLV to signal we scanned but didnt see them
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_CURR, 0, NULL);
     }
     log_info("MBN:UL saw %d sent best %d", wble_getNbIBActive(_ctx.wbleCtx, 0), nbSent);
-    return (nbSent>0);
+//    return (nbSent>0);
+    return true;        // always gotta send UL as 'no BLEs seen' is also important!
 }
 
 static APP_CORE_API_t _api = {
