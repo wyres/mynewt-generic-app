@@ -82,7 +82,7 @@ static void stop() {
     // and power down 
     wble_stop(_ctx.wbleCtx);
 }
-static void sleep() {
+static void off() {
 
 }
 static void deepsleep() {
@@ -127,7 +127,7 @@ static bool getData(APP_CORE_UL_t* ul) {
 static APP_CORE_API_t _api = {
     .startCB = &start,
     .stopCB = &stop,
-    .sleepCB = &sleep,
+    .offCB = &off,
     .deepsleepCB = &deepsleep,
     .getULDataCB = &getData,    
     .ticCB = NULL,    

@@ -46,7 +46,7 @@ static void stop() {
     log_debug("MP:done");
     SRMgr_stop();
 }
-static void sleep() {
+static void off() {
     // ensure sensors are low power mode
     SRMgr_stop();
 }
@@ -63,7 +63,7 @@ static bool getData(APP_CORE_UL_t* ul) {
 static APP_CORE_API_t _api = {
     .startCB = &start,
     .stopCB = &stop,
-    .sleepCB = &sleep,
+    .offCB = &off,
     .deepsleepCB = &deepsleep,
     .getULDataCB = &getData,
     .ticCB = NULL,    

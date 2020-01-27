@@ -163,11 +163,11 @@ static void stop() {
     gps_stop();
 //    log_debug("finished mod-gps");
 }
-static void sleep() {
-    // TODO
+static void off() {
+    // nothing to do
 }
 static void deepsleep() {
-    // TODO
+    // nothing to do
 }
 static bool getData(APP_CORE_UL_t* ul) {
     if (_ctx.doFix) {
@@ -190,7 +190,7 @@ static bool getData(APP_CORE_UL_t* ul) {
 static APP_CORE_API_t _api = {
     .startCB = &start,
     .stopCB = &stop,
-    .sleepCB = &sleep,
+    .offCB = &off,
     .deepsleepCB = &deepsleep,
     .getULDataCB = &getData,
     .ticCB = NULL,
