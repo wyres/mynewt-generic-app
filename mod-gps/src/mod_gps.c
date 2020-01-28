@@ -28,20 +28,52 @@
 #include "app-core/app_msg.h"
 #include "mod-gps/mod_gps.h"
 
-#define MIN_GOOD_FIXES (2)
-#define REQUEST_N_TIMES (1)     // How many rounds to do a fix for when request by backend DL action?
-
+#define MIN_GOOD_FIXES (5)          // Must get 5 good fixes with acceptable precision to exit
+#define REQUEST_N_TIMES (1)         // How many rounds to do a fix for when request by backend DL action?
+#define ACCEPTABLE_PRECISION_DM (200)   // accept fixes when precision is estimated as <20.0m (200dm)
 // COntext data
 static struct appctx {
     uint32_t goodFixCnt;
     uint8_t fixDemanded;   // did we get a DL action asking for a fix?
-    bool doFix;         // did we try to do a fix this round?
-    gps_data_t goodFix;
-} _ctx = {
-    .goodFix.rxAt=0,
-};
+    bool doFix;             // did we try to do a fix this round?
+    gps_data_t goodFix;     // good (merged) fix
+    gps_data_t currFix;     // current fix got from mgr
+} _ctx;     // all initialised to 0 as bss
 
 static void logGPSPosition(gps_data_t* pos);
+static bool mergeNewGPSFix() {
+    if (gps_getData(&_ctx.currFix)) {
+        // if no good fix currently, or a not very good one, just copy the new one (as long as its better)
+        // This ensures we end up with goodFix containing a fix of some kind, even if its not the optimal result
+        if (_ctx.goodFix.rxAt==0) {
+            _ctx.goodFix.lat = _ctx.currFix.lat;
+            _ctx.goodFix.lon = _ctx.currFix.lon;
+            _ctx.goodFix.alt = _ctx.currFix.alt;
+            _ctx.goodFix.prec = _ctx.currFix.prec;
+            _ctx.goodFix.rxAt = _ctx.currFix.rxAt;
+            return true;        // got at least 1 fix
+        } else if ((_ctx.goodFix.prec > ACCEPTABLE_PRECISION_DM) && (_ctx.currFix.prec < _ctx.goodFix.prec)) {
+            _ctx.goodFix.lat = _ctx.currFix.lat;
+            _ctx.goodFix.lon = _ctx.currFix.lon;
+            _ctx.goodFix.alt = _ctx.currFix.alt;
+            _ctx.goodFix.prec = _ctx.currFix.prec;
+            _ctx.goodFix.rxAt = _ctx.currFix.rxAt;
+            // tell caller if they got an acceptable one here
+            return (_ctx.goodFix.prec < ACCEPTABLE_PRECISION_DM);
+        } else {
+            // Merge new fix with historic via averaging if its reasonable
+            if (_ctx.currFix.prec < ACCEPTABLE_PRECISION_DM) {
+                _ctx.goodFix.lat = (_ctx.goodFix.lat+_ctx.currFix.lat)/2;
+                _ctx.goodFix.lon = (_ctx.goodFix.lon+_ctx.currFix.lon)/2;
+                _ctx.goodFix.alt = (_ctx.goodFix.alt+_ctx.currFix.alt)/2;
+                _ctx.goodFix.prec = (_ctx.goodFix.prec+_ctx.currFix.prec)/2;
+                _ctx.goodFix.rxAt = _ctx.currFix.rxAt;
+                return true;
+            }
+        }
+    }
+    return false;       // no new fix merged
+}
 
 static void gps_cb(GPS_EVENT_TYPE_t e) {
     switch(e) {
@@ -61,15 +93,21 @@ static void gps_cb(GPS_EVENT_TYPE_t e) {
             break;
         }
         case GPS_NEWFIX: {
-            // YES :  read and move on
-            gps_getData(&_ctx.goodFix);
-            if (_ctx.goodFixCnt++ > MIN_GOOD_FIXES) {
-                log_debug("MG: fix done");
-                // This means we're done
-                AppCore_module_done(APP_MOD_GPS);
-                gps_stop();
+            // decide if precision is good enough and can merge in new value. If so, see if we can stop.
+            // This is only an option when not doing fixOnDemand triggered by backend
+            // action, as we want to go the full timeout to get best result
+            if (mergeNewGPSFix()) {
+                if (_ctx.fixDemanded==0 &&
+                        _ctx.goodFixCnt++ > MIN_GOOD_FIXES) {
+                    log_debug("MG: fix done");
+                    // This means we're done
+                    AppCore_module_done(APP_MOD_GPS);
+                    gps_stop();
+                } else {
+                    log_debug("MG: fix ok");
+                }
             } else {
-                log_debug("MG: fix");
+                log_debug("MG: fix nok");
             }
             break;
         }
@@ -102,7 +140,8 @@ static uint32_t start() {
     CFMgr_getOrAddElement(CFG_UTIL_KEY_GPS_FIX_MODE, &fixmode, sizeof(uint8_t));
 
     // how many good fixes this time?
-    _ctx.goodFixCnt=0;
+    _ctx.goodFixCnt = 0;
+    _ctx.goodFix.rxAt = 0;  // not got one yet...
 
     int32_t fixage = gps_lastGPSFixAgeMins();
     uint32_t gpstimeout = 1;        // 1 second if we don't decide to do a fix
@@ -164,14 +203,17 @@ static void stop() {
 //    log_debug("finished mod-gps");
 }
 static void off() {
+    gps_stop();
     // nothing to do
 }
 static void deepsleep() {
+    gps_stop();
     // nothing to do
 }
 static bool getData(APP_CORE_UL_t* ul) {
     if (_ctx.doFix) {
-        if (_ctx.goodFixCnt>0 && _ctx.goodFix.rxAt!=0) {
+        // Did we get a fix this time?
+        if (_ctx.goodFix.rxAt!=0) {
             app_core_msg_ul_addTLV(ul, APP_CORE_UL_GPS, sizeof(gps_data_t), &_ctx.goodFix);
             log_info("MG: UL fix %d,%d,%d p=%d from %d sats", _ctx.goodFix.lat, _ctx.goodFix.lon, _ctx.goodFix.alt, _ctx.goodFix.prec, _ctx.goodFix.nSats);
             // Log this position with timestamp (can be retrieved with DL action)
