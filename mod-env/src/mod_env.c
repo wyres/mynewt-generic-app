@@ -31,11 +31,12 @@
 // Send debug data at startup twice
 #define NB_REBOOT_INFOS (2)
 // Force uplink with env data every hour?
-#define FORCE_UL_INTERVAL_S (60*60)
+#define FORCE_UL_INTERVAL_S (60*15)
 // COntext data
 static struct appctx {
     uint8_t sentRebootInfo;
     int32_t pressureOffsetPa;
+    uint32_t lastEnvForceDate;
 } _ctx; // all 0 bybss def
 
 static void buttonChangeCB(void* ctx, SR_BUTTON_STATE_t currentState, SR_BUTTON_PRESS_TYPE_t currentPressType);
@@ -47,6 +48,10 @@ static uint32_t start() {
     // sensors that require power up or significant check time
     SRMgr_start();
     MMMgr_check();
+
+    //Setting last environmental forced uplink to 0
+    _ctx.lastEnvForceDate = 0;
+    
     log_debug("ME:for 1s");
     return 1*1000;
 }
@@ -67,7 +72,10 @@ static bool getData(APP_CORE_UL_t* ul) {
     log_info("ME: UL env");
     // Decide if gonna force the UL to include current values and to be sent. 
     // TODO note this essentially override the 'max time between UL' setting in the appcore code
-    bool forceULData = ((TMMgr_getRelTimeSecs() - AppCore_lastULTime()) > FORCE_UL_INTERVAL_S);
+    bool forceULData = ((TMMgr_getRelTimeSecs() - _ctx.lastEnvForceDate) > FORCE_UL_INTERVAL_S);
+    // log_debug("GP:doForce: %s",forceULData ? "true" : "false");
+    // log_debug("GP:diff: %d",(TMMgr_getRelTimeSecs() - _ctx.lastEnvForceDate));
+
     // if first N times after reboot, add reboot info
     if (_ctx.sentRebootInfo >0) {
         _ctx.sentRebootInfo--;
@@ -98,6 +106,14 @@ static bool getData(APP_CORE_UL_t* ul) {
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_VERSION, sizeof(v), v);
         forceULData = true;     // as we sent debug
     }
+    //log_debug("GP:finalForce: %s",forceULData ? "true" : "false");
+
+
+    if(forceULData)
+    {
+        _ctx.lastEnvForceDate = TMMgr_getRelTimeSecs();
+    }
+
     // get accelero if changed since last UL
     if (MMMgr_getLastMovedTime() >= AppCore_lastULTime()) {
         uint8_t v[4];
@@ -216,7 +232,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         v[9] = SRMgr_getLastButtonPressType();
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_BUTTON, sizeof(v), v);
     }
-    return forceULData || SRMgr_updateEnvs();     // update those that changed as we have added them to the UL... and return the flag that says if any changed
+    return SRMgr_updateEnvs(forceULData);     // update those that changed as we have added them to the UL... and return the flag that says if any changed
 }
 
 static APP_CORE_API_t _api = {
@@ -278,5 +294,5 @@ static void buttonChangeCB(void* ctx, SR_BUTTON_STATE_t currentState, SR_BUTTON_
 // Get debug data in next UL
 static void A_getdebug(uint8_t* v, uint8_t l) {
     log_info("AC:action GETDEBUG");    
-    _ctx.sentRebootInfo=1;      // so it gets sent in next UL one time
+    //_ctx.sentRebootInfo=1;      // so it gets sent in next UL one time
 }
