@@ -51,6 +51,7 @@ static bool mergeNewGPSFix() {
             _ctx.goodFix.alt = _ctx.currFix.alt;
             _ctx.goodFix.prec = _ctx.currFix.prec;
             _ctx.goodFix.rxAt = _ctx.currFix.rxAt;
+            _ctx.goodFix.nSats = _ctx.currFix.nSats;
             return true;        // got at least 1 fix
         } else if ((_ctx.goodFix.prec > ACCEPTABLE_PRECISION_DM) && (_ctx.currFix.prec < _ctx.goodFix.prec)) {
             _ctx.goodFix.lat = _ctx.currFix.lat;
@@ -58,6 +59,7 @@ static bool mergeNewGPSFix() {
             _ctx.goodFix.alt = _ctx.currFix.alt;
             _ctx.goodFix.prec = _ctx.currFix.prec;
             _ctx.goodFix.rxAt = _ctx.currFix.rxAt;
+            _ctx.goodFix.nSats = _ctx.currFix.nSats;
             // tell caller if they got an acceptable one here
             return (_ctx.goodFix.prec < ACCEPTABLE_PRECISION_DM);
         } else {
@@ -68,6 +70,7 @@ static bool mergeNewGPSFix() {
                 _ctx.goodFix.alt = (_ctx.goodFix.alt+_ctx.currFix.alt)/2;
                 _ctx.goodFix.prec = (_ctx.goodFix.prec+_ctx.currFix.prec)/2;
                 _ctx.goodFix.rxAt = _ctx.currFix.rxAt;
+                _ctx.goodFix.nSats = _ctx.currFix.nSats;
                 return true;
             }
         }
@@ -173,6 +176,7 @@ static uint32_t start() {
                 _ctx.doFix = true;
                 _ctx.fixDemanded--;       // dec shots
             }
+            break;
         }
         default: 
             _ctx.doFix = false;
@@ -214,7 +218,22 @@ static bool getData(APP_CORE_UL_t* ul) {
     if (_ctx.doFix) {
         // Did we get a fix this time?
         if (_ctx.goodFix.rxAt!=0) {
-            app_core_msg_ul_addTLV(ul, APP_CORE_UL_GPS, sizeof(gps_data_t), &_ctx.goodFix);
+            // UL structure, explicitly written to avoid compilier decisions on padding etc
+            /*
+                int32_t lat;
+                int32_t lon;
+                int32_t alt;
+                int32_t prec;      // precision in 0.1m. -1 means the fix is invalid
+                uint32_t rxAt;      // timestamp in secs since boot of when this position was updated
+                uint8_t nSats;      // number of satellites used for this fix
+            */
+            uint8_t* v = app_core_msg_ul_addTLgetVP (ul, APP_CORE_UL_GPS, 21);
+            Util_writeLE_int32_t(v, 0, _ctx.goodFix.lat);
+            Util_writeLE_int32_t(v, 4, _ctx.goodFix.lon);
+            Util_writeLE_int32_t(v, 8, _ctx.goodFix.alt);
+            Util_writeLE_int32_t(v, 12, _ctx.goodFix.prec);
+            Util_writeLE_uint32_t(v, 16, _ctx.goodFix.rxAt);
+            v[20] = _ctx.goodFix.nSats;
             log_info("MG: UL fix %d,%d,%d p=%d from %d sats", _ctx.goodFix.lat, _ctx.goodFix.lon, _ctx.goodFix.alt, _ctx.goodFix.prec, _ctx.goodFix.nSats);
             // Log this position with timestamp (can be retrieved with DL action)
             logGPSPosition(&_ctx.goodFix);

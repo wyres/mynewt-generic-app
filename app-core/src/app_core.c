@@ -1077,16 +1077,20 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char *fwdate, const
     CFMgr_getOrAddElementCheckRangeINT8(CFG_UTIL_KEY_LORA_TXPOWER, &_ctx.loraCfg.txPower, -30, 22);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_TXPORT, &_ctx.loraCfg.txPort, sizeof(uint8_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_RXPORT, &_ctx.loraCfg.rxPort, sizeof(uint8_t));
-    // Note the api wants the ids in init -> this means if user changes in AT then they need to reboot...
-    lora_api_init(&_ctx.loraCfg.deveui[0], &_ctx.loraCfg.appeui[0], &_ctx.loraCfg.appkey[0], _ctx.loraCfg.useAdr, _ctx.loraCfg.loraSF, _ctx.loraCfg.txPower);
-    LORAWAN_RESULT_t rxres = lora_api_registerRxCB(-1, lora_rx_cb, &_ctx);
-    if (rxres != LORAWAN_RES_OK)
-    {
-        // oops
-        log_warn("AC:bad register lora rx cb %d", rxres);
-        assert(0);
+    if (_ctx.deviceConfigOk) {
+        // Note the api wants the ids in init -> this means if user changes in AT then they need to reboot...
+        lora_api_init(&_ctx.loraCfg.deveui[0], &_ctx.loraCfg.appeui[0], &_ctx.loraCfg.appkey[0], _ctx.loraCfg.useAdr, _ctx.loraCfg.loraSF, _ctx.loraCfg.txPower);
+        LORAWAN_RESULT_t rxres = lora_api_registerRxCB(-1, lora_rx_cb, &_ctx);
+        if (rxres != LORAWAN_RES_OK)
+        {
+            // oops
+            log_warn("AC:bad register lora rx cb %d", rxres);
+            assert(0);
+        }
+        _ctx.fw.loraregion = lora_api_getCurrentRegion();
+    } else {
+        log_warn("AC:no lora init as missing critical device config");
     }
-    _ctx.fw.loraregion = lora_api_getCurrentRegion();
     // write fw config into PROM as config key so that it is accessible via AT command or DL action?
     // auto creates if 1st run
     CFMgr_setElement(CFG_UTIL_KEY_FIRMWARE_INFO, &_ctx.fw, sizeof(_ctx.fw));
