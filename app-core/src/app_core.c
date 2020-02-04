@@ -65,7 +65,7 @@ static struct appctx
     uint32_t joinStartTS; // in seconds since epoch
     uint32_t maxTimeBetweenULMins;
     bool doReboot;
-    uint8_t stockMode;
+    uint8_t notStockMode;
     uint32_t joinTimeCheckSecs;
     uint32_t rejoinWaitMins;
     uint32_t rejoinWaitSecs;
@@ -100,7 +100,7 @@ static struct appctx
     .rejoinWaitMins = 120,   // 2 hours for rejoin tries between the try blocks
     .rejoinWaitSecs = 60,    // 60s default for rejoin tries in the 'try X times' (ok for SF10 duty cycle?)
     .nbJoinAttempts = 0,
-    .stockMode = 0, // in stock mode by default until a rejoin works
+    .notStockMode = 0, // in stock mode by default until a rejoin works
     .modSetupTimeSecs = 3,
     .maxTimeBetweenULMins = 120, // 2 hours
     .lastULTime = 0,
@@ -312,7 +312,7 @@ static SM_STATE_ID_t State_Startup(void *arg, int e, void *data)
 
     default:
     {
-        log_debug("AC:unknown %d in Startup", e);
+        sm_default_event_log(ctx->mySMId, "AC", e);
         return SM_STATE_CURRENT;
     }
     }
@@ -384,8 +384,8 @@ static SM_STATE_ID_t State_TryJoin(void *arg, int e, void *data)
     {
         log_info("AC:join ok");
         // Update to say we are not in stock mode
-        ctx->stockMode = 1;
-        CFMgr_setElement(CFG_UTIL_KEY_STOCK_MODE, &ctx->stockMode, 1);
+        ctx->notStockMode = 1;
+        CFMgr_setElement(CFG_UTIL_KEY_STOCK_MODE, &ctx->notStockMode, 1);
         app_core_msg_ul_init(&ctx->txmsg);
         ctx->ulIsCrit = false;         // assume we're not gonna send it (its not critical)
         return MS_GETTING_SERIAL_MODS; // go directly get data and send it
@@ -393,7 +393,7 @@ static SM_STATE_ID_t State_TryJoin(void *arg, int e, void *data)
     case ME_LORA_JOIN_FAIL:
     {
         // For stock mode, check if we ever managed to join (which sets stock mode to false)
-        if (ctx->stockMode == 0)
+        if (ctx->notStockMode == 0)
         {
             log_warn("AC:join fail and never joined, going stock mode");
             return MS_STOCK;
@@ -403,7 +403,7 @@ static SM_STATE_ID_t State_TryJoin(void *arg, int e, void *data)
     }
     default:
     {
-        log_debug("AC:unknown %d in try join", e);
+        sm_default_event_log(ctx->mySMId, "AC", e);
         return SM_STATE_CURRENT;
     }
     }
@@ -456,7 +456,7 @@ static SM_STATE_ID_t State_Stock(void *arg, int e, void *data)
     }
     default:
     {
-        log_debug("AC:? %d in Idle", e);
+        sm_default_event_log(ctx->mySMId, "AC", e);
         return SM_STATE_CURRENT;
     }
     }
@@ -526,7 +526,7 @@ static SM_STATE_ID_t State_WaitJoinRetry(void *arg, int e, void *data)
     }
     default:
     {
-        log_debug("AC:? %d in wait join retry", e);
+        sm_default_event_log(ctx->mySMId, "AC", e);
         return SM_STATE_CURRENT;
     }
     }
@@ -654,7 +654,7 @@ static SM_STATE_ID_t State_Idle(void *arg, int e, void *data)
     }
     default:
     {
-        log_debug("AC:? %d in Idle", e);
+        sm_default_event_log(ctx->mySMId, "AC", e);
         return SM_STATE_CURRENT;
     }
     }
@@ -747,7 +747,7 @@ static SM_STATE_ID_t State_GettingSerialMods(void *arg, int e, void *data)
     }
     default:
     {
-        log_debug("AC:? %d in GettingSerialMods", e);
+        sm_default_event_log(ctx->mySMId, "AC", e);
         return SM_STATE_CURRENT;
     }
     }
@@ -835,7 +835,7 @@ static SM_STATE_ID_t State_GettingParallelMods(void *arg, int e, void *data)
 
     default:
     {
-        log_debug("AC:? %d in GettingParallelMods", e);
+        sm_default_event_log(ctx->mySMId, "AC", e);
         return SM_STATE_CURRENT;
     }
     }
@@ -991,7 +991,7 @@ static SM_STATE_ID_t State_SendingUL(void *arg, int e, void *data)
     }
     default:
     {
-        log_debug("AC:unknown %d in SendingUL", e);
+        sm_default_event_log(ctx->mySMId, "AC", e);
         return SM_STATE_CURRENT;
     }
     }
@@ -1050,7 +1050,7 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char *fwdate, const
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MODS_ACTIVE_MASK, &_ctx.modsMask[0], MOD_MASK_SZ);
     CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_MAXTIME_UL_MINS, &_ctx.maxTimeBetweenULMins, 1, 24 * 60);
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_DL_ID, &_ctx.lastDLId, 0, 15);
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_STOCK_MODE, &_ctx.stockMode, sizeof(uint8_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_STOCK_MODE, &_ctx.notStockMode, sizeof(uint8_t));
     CFMgr_registerCB(configChangedCB); // For changes to our config
 
     registerActions();
