@@ -608,10 +608,11 @@ static SM_STATE_ID_t State_Idle(void *arg, int e, void *data)
         MMMgr_check(); // check hardware
         uint32_t idletimeS = ctx->idleTimeNotMovingMins * 60;
         // check if has moved recently and use different timeout
-        if (MMMgr_hasMovedSince(ctx->lastULTime))
-        {
-            log_debug("AC:moved since last UL %d secs ago", (TMMgr_getRelTimeSecs() - MMMgr_getLastMovedTime()));
+        if (MMMgr_hasMovedSince(ctx->lastULTime)) {
             idletimeS = ctx->idleTimeMovingSecs;
+            log_debug("AC:move (%d ago) since UL , it %d", (TMMgr_getRelTimeSecs() - MMMgr_getLastMovedTime()), idletimeS);
+        } else {
+            log_debug("AC:no move (%d ago) since UL , it %d", (TMMgr_getRelTimeSecs() - MMMgr_getLastMovedTime()), idletimeS);
         }
         idletimeS -= 1; // adjust by 1s to get run if 'close' to timeout
         uint32_t dt = TMMgr_getRelTimeSecs() - ctx->idleStartTS;
