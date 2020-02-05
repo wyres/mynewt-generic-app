@@ -28,7 +28,7 @@
 #define MAX_BLE_TOSCAN  (16)     
 // Max number we send up (the 'best' rssi ones)
 #define MAX_BLE_TOSEND MYNEWT_VAL(MOD_BLE_MAXIBS_NAV)
-// how long till we through them out of history?
+// how long till we remove them out of history? For navigation, we keep no history between scans generally, as backend deals with history
 #define MAX_BEACON_TIMEOUT_SECS (60)
 
 static struct {
@@ -77,7 +77,7 @@ static uint32_t start() {
 static void stop() {
     // Done BLE, go idle
     wble_scan_stop(_ctx.wbleCtx);
-    // clean up list for any we haven't seen for a while
+    // only keep ones we saw this scan
     wble_resetList(_ctx.wbleCtx, MAX_BEACON_TIMEOUT_SECS);
     // and power down 
     wble_stop(_ctx.wbleCtx);

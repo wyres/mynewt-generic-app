@@ -47,7 +47,7 @@ static uint32_t start() {
     log_debug("ME:start env");
     // sensors that require power up or significant check time
     SRMgr_start();
-    MMMgr_check();
+    MMMgr_start();
 
     //Setting last environmental forced uplink to 0
     _ctx.lastEnvForceDate = 0;
@@ -59,6 +59,7 @@ static uint32_t start() {
 static void stop() {
     log_debug("ME:done");
     SRMgr_stop();
+    MMMgr_stop();
 }
 static void off() {
     // ensure sensors are low power mode
@@ -153,9 +154,7 @@ static bool getData(APP_CORE_UL_t* ul) {
             int8_t z;
         } v;*/
         v[0] = MMMgr_getOrientation();
-        v[1] = MMMgr_getXdG();
-        v[2] = MMMgr_getYdG();
-        v[3] = MMMgr_getZdG();        
+        MMMgr_getXYZ((int8_t*)&v[1], (int8_t*)&v[2], (int8_t*)&v[3]);
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_ORIENT, sizeof(v), v);
     }
     // Basic environmental stuff

@@ -323,6 +323,7 @@ static bool getData(APP_CORE_UL_t* ul) {
             uint8_t bletype = (_ctx.iblist[i].major & 0xff00) >> 8;
             if (bletype==BLE_TYPE_NAV) {
                 // ignore, shouldn't happen as the scanner was told to ignore these guys
+                log_warn("MBT:remove unex NAV type");
                 // Free up his space
                 _ctx.iblist[i].lastSeenAt=0;
             } else if (bletype==BLE_TYPE_ENTEREXIT) {
@@ -355,7 +356,11 @@ static bool getData(APP_CORE_UL_t* ul) {
                             log_debug("MBT:presence major=%d", majorPresence);
                         }
                     }
-                } // else we don't care about these guys
+                } else  {
+                    // we don't care about ones with a minor that we're not looking for - remove from our list to avoid blocking a slot
+                    _ctx.iblist[i].lastSeenAt=0;
+                    log_debug("MBT:remove uncon pres minor=%d", _ctx.iblist[i].minor);
+                }
             } else if (bletype>=BLE_TYPE_COUNTABLE_START && bletype<=BLE_TYPE_COUNTABLE_END) {
                 // Ensure remove from our list if timed out
                 if ((now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60)) {
@@ -372,6 +377,11 @@ static bool getData(APP_CORE_UL_t* ul) {
                         nbCount++;
                     } // else should not happen 
                 }
+            } else {
+                // ignore, shouldn't happen as the scanner was told to ignore these guys
+                log_warn("MBT:remove unex type=%d", bletype);
+                // Free up the space
+                _ctx.iblist[i].lastSeenAt=0;
             }
         }
     }
