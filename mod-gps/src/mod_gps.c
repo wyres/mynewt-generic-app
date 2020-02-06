@@ -36,6 +36,7 @@ static struct appctx {
     uint32_t goodFixCnt;
     uint8_t fixDemanded;   // did we get a DL action asking for a fix?
     bool doFix;             // did we try to do a fix this round?
+    uint32_t triedAtS;      // TS of last try
     gps_data_t goodFix;     // good (merged) fix
     gps_data_t currFix;     // current fix got from mgr
 } _ctx;     // all initialised to 0 as bss
@@ -142,12 +143,8 @@ static uint32_t start() {
     gps_setPowerMode(powermode);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_GPS_FIX_MODE, &fixmode, sizeof(uint8_t));
 
-    // how many good fixes this time?
-    _ctx.goodFixCnt = 0;
-    _ctx.goodFix.rxAt = 0;  // not got one yet...
-
-    int32_t fixage = gps_lastGPSFixAgeMins();
-    uint32_t gpstimeout = 1;        // 1 second if we don't decide to do a fix
+    int32_t fixagemins = gps_lastGPSFixAgeMins();
+    uint32_t gpstimeoutsecs = 1;        // 1 second if we don't decide to do a fix
     _ctx.doFix = false;
     // TODO conditions of movement vs fixmode
     switch(fixmode) {
@@ -185,19 +182,31 @@ static uint32_t start() {
     // TODO check global flag indicating if we got indoor loc, in this case may not want to do gps???
     // or maybe just have a short timeout?
 
+    // If didn't get a fix last time, and have not moved since last try, then no point in trying this time
+    if ( _ctx.goodFix.rxAt==0 && 
+            MMMgr_hasMovedSince(_ctx.triedAtS)==false) {
+        _ctx.doFix = false;
+        log_debug("MG:not trying : no fix last time and no move since");
+    }
+
     // Depending on fix mode, we start GPS or not this time round...
     if (_ctx.doFix) {
+        // no good fixes yet this time round
+        _ctx.goodFixCnt = 0;
+        _ctx.goodFix.rxAt = 0;  // not got one yet...
+        _ctx.triedAtS = TMMgr_getRelTimeSecs();     // When we last tried
         // leaving to do somehting with the GPS, so tell it to go with a callback to tell me when its got something
-        if (fixage<0 || fixage > 24*60) {
+        if (fixagemins<0 || fixagemins > 24*60) {
             // no fix last time, or was too long ago - could take 5 mins to find satellites?
-            gpstimeout = coldStartTime;
+            gpstimeoutsecs = coldStartTime;
         } else {
             // If we had a lock before, and it was <24 hours, we should get a fix rapidly (if we can)
-            gpstimeout = warmStartTime + (fixage/24);      // adjust minimum fix time by up to 60s if last fix is old
+            gpstimeoutsecs = warmStartTime + (fixagemins/24);      // adjust minimum fix time by up to 60s if last fix is old
         }
-    //    log_debug("mod-gps last %d m - next fix in %d s", fixage, gpstimeout);
+        //    log_debug("mod-gps last %d m - next fix in %d s", fixage, gpstimeoutsecs);
+        // Start GPS Note we are handling timeouts so pass the fixTimeout as 0 to disable gpsmgr's timeout
         gps_start(gps_cb, 0);
-        return gpstimeout*1000;         // return time required in ms
+        return gpstimeoutsecs*1000;         // return time required in ms
     } else {
         return 0;       // no op required
     }

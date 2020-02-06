@@ -1178,7 +1178,7 @@ void AppCore_registerAction(uint8_t id, ACTIONFN_t cb)
     _ctx.actions[_ctx.nActions].id = id;
     _ctx.actions[_ctx.nActions].fn = cb;
     _ctx.nActions++;
-    log_debug("AC: RA [%d]", id);
+//    log_debug("AC: RA [%d]", id);
 }
 // Find action fn or NULL
 ACTIONFN_t AppCore_findAction(uint8_t id)
