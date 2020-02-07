@@ -65,6 +65,9 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
 
 // My api functions
 static uint32_t start() {
+    // Get max BLEs, validate value is ok to avoid issues...
+    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_MAX_NAV_PER_UL, &_ctx.maxNavPerUL, 1, MAX_BLE_TOSEND);
+
     // and tell ble to go with a callback to tell me when its got something
     wble_start(_ctx.wbleCtx, ble_cb);
     // Return the scan time
@@ -139,14 +142,6 @@ void mod_ble_scan_nav_init(void) {
 
     // initialise access
     _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
-
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_MAX_NAV_PER_UL, &_ctx.maxNavPerUL, sizeof(uint8_t));
-    // Validate value is ok to avoid issues...
-    if (_ctx.maxNavPerUL==0) {
-        _ctx.maxNavPerUL= 1;        // No point in enabling the module if not gonna send at least 1!
-    } else if (_ctx.maxNavPerUL>MAX_BLE_TOSEND) {
-        _ctx.maxNavPerUL= MAX_BLE_TOSEND;
-    }
 
     // hook app-core for ble scan - serialised as competing for UART
     AppCore_registerModule(APP_MOD_BLE_SCAN_NAV, &_api, EXEC_SERIAL);

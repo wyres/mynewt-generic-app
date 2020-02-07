@@ -186,6 +186,12 @@ static ibeacon_data_t STATIC_TEST_IBLIST_COUNT[] = {
 };
 #endif
 
+#define ENTER_UL_SZ (5)
+#define EXIT_UL_SZ (3)
+#define COUNT_UL_SZ (2)
+#define PRESENCE_HDR_UL_SZ (2)
+#define TL_HDR_UL_SZ (2)
+
 // Max ibeacons we track in the scan history. We give ourselves some space over the defined limit to deal with the 'exit' timeouts.
 #define MAX_BLE_TRACKED (MYNEWT_VAL(MOD_BLE_MAXIBS_TAG_INZONE)+10)
 
@@ -271,11 +277,18 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
 
 // My api functions
 static uint32_t start() {
+    // Read config each start() to take into account any changes
+    // exit timeout should actually be in function of the delay between scans...
+    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_EXIT_TIMEOUT_MINS, &_ctx.exitTimeoutMins, 1, 4*60);
+    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_MAX_ENTER_PER_UL, &_ctx.maxEnterPerUL, 1, 255);
+    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_MAX_EXIT_PER_UL, &_ctx.maxExitPerUL, 1, 255);
+    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_PRESENCE_MINOR, &_ctx.presenceMinorMSB, 0, 255);
+
     // and tell ble to go with a callback to tell me when its got something
     wble_start(_ctx.wbleCtx, ble_cb);
-    // Return the scan time
+    // Return the scan time (checking config is ok)
     uint32_t bleScanTimeMS = 3000;
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_SCAN_TIME_MS, &bleScanTimeMS, sizeof(uint32_t));
+    CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_BLE_SCAN_TIME_MS, &bleScanTimeMS, 1000, 60000);
 
     return bleScanTimeMS;
 }
@@ -402,7 +415,7 @@ static bool getData(APP_CORE_UL_t* ul) {
 
     // Adjust numbers to divide up remaining UL space 'fairly' between enter/exit/types
     // how much space would it take (assuming spread over 4 UL packets)
-    int bytesRequired = nbEnter*5 + nbExit*3 + nbTypes*2 + 12;
+    int bytesRequired = nbEnter*ENTER_UL_SZ + nbExit*EXIT_UL_SZ + nbTypes*COUNT_UL_SZ + TL_HDR_UL_SZ*6;
     int bytesAvailable = app_core_msg_ul_getTotalSpaceAvailable(ul);
     // Assume splitting space evenly ie 1/3 each so everyone has same reduction %age if required
     int percentReduc = (bytesAvailable>bytesRequired) ? 100 : (bytesAvailable*100 / bytesRequired);
@@ -416,12 +429,15 @@ static bool getData(APP_CORE_UL_t* ul) {
         uint8_t* vp = NULL;
         int nbThisUL = 0;
         for(int i=0;i<MAX_BLE_TRACKED && nbAdded<nbExitToAdd; i++) {
-            if ((_ctx.iblist[i].lastSeenAt>0) && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60)) {
+            // If a valid entry, and of enter/exit ble type, and has timed out...
+            if ((_ctx.iblist[i].lastSeenAt>0) 
+                    && (((_ctx.iblist[i].major & 0xFF00) >> 8) == BLE_TYPE_ENTEREXIT) 
+                    && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60)) {
                 if (nbThisUL <= 0) {
                     // Find space in UL
                     int bytesInUL = app_core_msg_ul_remainingSz(ul);
                     // Check if space for TL and 1 ble at least
-                    if (bytesInUL < 5) {
+                    if (bytesInUL < (TL_HDR_UL_SZ + EXIT_UL_SZ)) {
                         // move to next message and get size (0=no next!)
                         if ((bytesInUL = app_core_msg_ul_requestNextUL(ul)) <= 0) {
                             // no more messages, sorry
@@ -429,16 +445,16 @@ static bool getData(APP_CORE_UL_t* ul) {
                             break;      // from for, we're done here
                         }
                     }
-                    nbThisUL = (bytesInUL-2) / 3; 
+                    nbThisUL = (bytesInUL-TL_HDR_UL_SZ) / EXIT_UL_SZ; 
                     if (nbThisUL > (nbExitToAdd-nbAdded)) {
                         // should always give a >0 answer as nbAdded is never >= nbExitToAdd here
                         nbThisUL = (nbExitToAdd-nbAdded);
                         assert(nbThisUL>0);
                     }
-                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_EXIT, nbThisUL*3);
+                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_EXIT, nbThisUL*EXIT_UL_SZ);
                 }
                 if (vp!=NULL) {
-                    // add maj/min to UL 
+                    // add maj/min to UL : must be number of bytes equal to EXIT_UL_SZ
                     *vp++=(_ctx.iblist[i].major & 0xFF);        // Just LSB of major
                     *vp++ = (_ctx.iblist[i].minor & 0xff);
                     *vp++ = ((_ctx.iblist[i].minor >> 8) & 0xff);
@@ -464,12 +480,15 @@ static bool getData(APP_CORE_UL_t* ul) {
         uint8_t* vp = NULL;
         int nbThisUL = 0;
         for(int i=0;i<MAX_BLE_TRACKED && nbAdded<nbEnterToAdd; i++) {
-            if (_ctx.iblist[i].new) {
+            // If entry is valid, and of type enter/exit, and is new, then...
+            if ((_ctx.iblist[i].lastSeenAt>0) 
+                    && (((_ctx.iblist[i].major & 0xFF00) >> 8) == BLE_TYPE_ENTEREXIT)
+                    && _ctx.iblist[i].new) {
                 if (nbThisUL <= 0) {
                     // Find space in UL
                     int bytesInUL = app_core_msg_ul_remainingSz(ul);
                     // Check if space for TL and 1 ble at least
-                    if (bytesInUL < 7) {
+                    if (bytesInUL < (TL_HDR_UL_SZ + ENTER_UL_SZ)) {
                         // move to next message and get size (0=no next!)
                         if ((bytesInUL = app_core_msg_ul_requestNextUL(ul)) <= 0) {
                             // no more messages, sorry
@@ -477,16 +496,16 @@ static bool getData(APP_CORE_UL_t* ul) {
                             break;      // from for, we're done here
                         }
                     }
-                    nbThisUL = (bytesInUL-2) / 5; 
+                    nbThisUL = (bytesInUL-TL_HDR_UL_SZ) / ENTER_UL_SZ; 
                     if (nbThisUL > (nbEnterToAdd-nbAdded)) {
                         // should always give a >0 answer as nbAdded is never >= nbEnterToAdd here
                         nbThisUL = (nbEnterToAdd-nbAdded);
                         assert(nbThisUL>0);
                     }
-                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_ENTER, nbThisUL*5);
+                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_ENTER, nbThisUL*ENTER_UL_SZ);
                 }
                 if (vp!=NULL) {
-                    // add maj/min to UL 
+                    // add maj/min to UL (number of bytes == ENTER_UL_SZ)
                     *vp++ = (_ctx.iblist[i].major & 0xFF);        // Just LSB of major
                     *vp++ = (_ctx.iblist[i].minor & 0xff);
                     *vp++ = ((_ctx.iblist[i].minor >> 8) & 0xff);
@@ -508,6 +527,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         }
     }
     // put in types and counts
+    // WARNING : backend must handle case where set of type/counts split across multiple ULs - must deal with set of ULs together...
     if (nbTypesToAdd>0) {
         int nbAdded = 0;
         uint8_t* vp = NULL;
@@ -517,8 +537,8 @@ static bool getData(APP_CORE_UL_t* ul) {
                 if (nbThisUL <= 0) {
                     // Find space in UL
                     int bytesInUL = app_core_msg_ul_remainingSz(ul);
-                    // Check if space for TL and count at least
-                    if (bytesInUL < 4) {
+                    // Check if space for TL and 1 count at least
+                    if (bytesInUL < (TL_HDR_UL_SZ + COUNT_UL_SZ)) {
                         // move to next message and get size (0=no next!)
                         if ((bytesInUL = app_core_msg_ul_requestNextUL(ul)) <= 0) {
                             // no more messages, sorry
@@ -526,13 +546,13 @@ static bool getData(APP_CORE_UL_t* ul) {
                             break;      // from for, we're done here
                         }
                     }
-                    nbThisUL = (bytesInUL-2) / 2; 
+                    nbThisUL = (bytesInUL-TL_HDR_UL_SZ) / COUNT_UL_SZ; 
                     if (nbThisUL > (nbTypesToAdd-nbAdded)) {
                         // should always give a >0 answer as nbAdded is never >= nbTypesToAdd here
                         nbThisUL = (nbTypesToAdd-nbAdded);
                         assert(nbThisUL>0);
                     }
-                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_COUNT, nbThisUL*2);
+                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_COUNT, nbThisUL*COUNT_UL_SZ);
                 }
                 if (vp!=NULL) {
                     *vp++=(BLE_TYPE_COUNTABLE_START+i);
@@ -557,7 +577,7 @@ static bool getData(APP_CORE_UL_t* ul) {
 
     // Ask for space for TLV if we see any presence guys as active
     if (maxMinorIdPresence>=0)  { 
-        uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_PRESENCE, 2+((maxMinorIdPresence/8)+1));
+        uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_PRESENCE, PRESENCE_HDR_UL_SZ+((maxMinorIdPresence/8)+1));
         *vp++ = (majorPresence & 0xff);
         *vp++ = _ctx.presenceMinorMSB;
         for(int i=0;i<MAX_BLE_TRACKED;i++) {
@@ -638,12 +658,6 @@ void mod_ble_scan_tag_init(void) {
     _ctx.maxExitPerUL=50;
     // initialise access (this is resistant to multiple calls...)
     _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
-
-    // exit timeout should actually be in function of the delay between scans...
-    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_EXIT_TIMEOUT_MINS, &_ctx.exitTimeoutMins, 1, 4*60);
-    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_MAX_ENTER_PER_UL, &_ctx.maxEnterPerUL, 1, 255);
-    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_MAX_EXIT_PER_UL, &_ctx.maxExitPerUL, 1, 255);
-    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_PRESENCE_MINOR, &_ctx.presenceMinorMSB, 0, 255);
 
     // hook app-core for ble scan - serialised as competing for UART
     AppCore_registerModule(APP_MOD_BLE_SCAN_TAGS, &_api, EXEC_SERIAL);
