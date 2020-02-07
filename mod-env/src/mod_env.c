@@ -30,8 +30,8 @@
 // may wish to may configurable?
 // Send debug data at startup twice
 #define NB_REBOOT_INFOS (2)
-// Force uplink with env data every hour?
-#define FORCE_UL_INTERVAL_S (60*15)
+// Force uplink with full set of env data every hour
+#define FORCE_UL_INTERVAL_S (60*60)
 // COntext data
 static struct appctx {
     uint8_t sentRebootInfo;
@@ -48,10 +48,7 @@ static uint32_t start() {
     // sensors that require power up or significant check time
     SRMgr_start();
     MMMgr_start();
-
-    //Setting last environmental forced uplink to 0
-    _ctx.lastEnvForceDate = 0;
-    
+   
     log_debug("ME:for 1s");
     return 1*1000;
 }
@@ -70,10 +67,15 @@ static void deepsleep() {
     SRMgr_stop();
 }
 static bool getData(APP_CORE_UL_t* ul) {
+    // byte array used for assembling values. Must be of size to fit largest guy
+    uint8_t v[12];
+
     log_info("ME: UL env");
     // Decide if gonna force the UL to include current values and to be sent. 
     // TODO note this essentially override the 'max time between UL' setting in the appcore code
     bool forceULData = ((TMMgr_getRelTimeSecs() - _ctx.lastEnvForceDate) > FORCE_UL_INTERVAL_S);
+    bool dataChanged = false;       // any env data 'significantly' changed and therefore must be sent
+
     // log_debug("GP:doForce: %s",forceULData ? "true" : "false");
     // log_debug("GP:diff: %d",(TMMgr_getRelTimeSecs() - _ctx.lastEnvForceDate));
 
@@ -81,9 +83,8 @@ static bool getData(APP_CORE_UL_t* ul) {
     if (_ctx.sentRebootInfo >0) {
         _ctx.sentRebootInfo--;
         // add to UL - last 8 reboot reasons
-        uint8_t buf[8];
-        RMMgr_getResetReasonBuffer(buf,8);
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_REBOOT, 8, buf);
+        RMMgr_getResetReasonBuffer(v,8);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_REBOOT, 8, v);
         // last asset reason
         void* la = RMMgr_getLastAssertCallerFn();
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_LASTASSERT, sizeof(la), &la);
@@ -93,7 +94,6 @@ static bool getData(APP_CORE_UL_t* ul) {
         // firmware version, build date
         APP_CORE_FW_t* fw = AppCore_getFwInfo();
         // Only sending up the minimum
-        uint8_t v[4];
         /* equivalent structure but we explicitly pack our data
         struct {
             uint8_t maj;
@@ -104,7 +104,7 @@ static bool getData(APP_CORE_UL_t* ul) {
         v[1] = (uint8_t)(fw->fwmin);
         v[2] = (uint8_t)(fw->fwbuild & 0xff);
         v[3] = (uint8_t)((fw->fwbuild & 0xff00) >> 8);
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_VERSION, sizeof(v), v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_VERSION, 4, v);
         forceULData = true;     // as we sent debug
     }
     //log_debug("GP:finalForce: %s",forceULData ? "true" : "false");
@@ -116,36 +116,36 @@ static bool getData(APP_CORE_UL_t* ul) {
     }
 
     // get accelero if changed since last UL
-    if (MMMgr_getLastMovedTime() >= AppCore_lastULTime()) {
-        uint8_t v[4];
+    if (forceULData || MMMgr_getLastMovedTime() >= AppCore_lastULTime()) {
+        dataChanged = true;
         /* equivalent structure but we explicitly pack our data
         struct {
             uint32_t lastMoveTS;
         } v;*/
         Util_writeLE_uint32_t(v, 0, MMMgr_getLastMovedTime());
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_MOVE, sizeof(v), v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_MOVE, 4, v);
     }
     if (MMMgr_getLastFallTime() >= AppCore_lastULTime()) {
-        uint8_t v[4];
+        dataChanged = true;
         /* equivalent structure but we explicitly pack our data
         struct {
             uint32_t lastFallTS;
         } v;*/
         Util_writeLE_uint32_t(v, 0,  MMMgr_getLastFallTime());
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_FALL, sizeof(v), v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_FALL, 4, v);
     }
     if (MMMgr_getLastShockTime() >= AppCore_lastULTime()) {
-        uint8_t v[4];
+        dataChanged = true;
         /* equivalent structure but we explicitly pack our data
         struct {
             uint32_t lastShockTS;
         } v;*/
         Util_writeLE_uint32_t(v, 0, MMMgr_getLastShockTime());
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_SHOCK, sizeof(v), v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_SHOCK, 4, v);
     }
     // orientation direct (if changed) 
     if (forceULData || MMMgr_getLastOrientTime() >= AppCore_lastULTime()) {
-        uint8_t v[4];
+        dataChanged = true;
         /* equivalent structure but we explicitly pack our data
         struct {
             uint8_t orient;
@@ -155,52 +155,56 @@ static bool getData(APP_CORE_UL_t* ul) {
         } v;*/
         v[0] = MMMgr_getOrientation();
         MMMgr_getXYZ((int8_t*)&v[1], (int8_t*)&v[2], (int8_t*)&v[3]);
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_ORIENT, sizeof(v), v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_ORIENT, 4, v);
     }
     // Basic environmental stuff
     if (forceULData || SRMgr_hasLightChanged()) {
+        dataChanged = true;
         // get luminaire
-        uint8_t vl = SRMgr_getLight();
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_LIGHT, sizeof(vl), &vl);
+        v[0] = SRMgr_getLight();
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_LIGHT, 1, v);
+        SRMgr_updateLight();        // for 'significant' change test
     }
     if (forceULData || SRMgr_hasBattChanged()) {
+        dataChanged = true;
         // get battery
-        uint8_t v[2];
         Util_writeLE_uint16_t(v, 0, SRMgr_getBatterymV());
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_BATTERY, sizeof(v), v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_BATTERY, 2, v);
+        SRMgr_updateBatt();        // for 'significant' change test
     }
-    if (forceULData || SRMgr_hasPressureChanged()) {
-        // get altimetre
-        uint8_t v[4];
+    // Note : do temp and pressure together as linked
+    if (forceULData || SRMgr_hasTempChanged() || SRMgr_hasPressureChanged()) {
+        dataChanged = true;
+        // get temperature
+        Util_writeLE_int16_t(v, 0, SRMgr_getTempdC());
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_TEMP, 2, v);
+        SRMgr_updateTemp();        // for 'significant' change test
 
+        // get altimetre
         int32_t vp = SRMgr_getPressurePa();
         // apply offset
         vp = vp + _ctx.pressureOffsetPa;
         Util_writeLE_int32_t(v, 0, vp);
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_PRESSURE, sizeof(v), v);
-    }
-    if (forceULData || SRMgr_hasTempChanged()) {
-        // get temperature
-        uint8_t v[2];
-        Util_writeLE_int16_t(v, 0, SRMgr_getTempdC());
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_TEMP, sizeof(v), v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_PRESSURE, 4, v);
+        SRMgr_updatePressure();        // for 'significant' change test
     }
     if (SRMgr_hasADC1Changed()) {
+        dataChanged = true;
         // get adc 1
-        uint8_t v[2];
-
         Util_writeLE_uint16_t(v, 0,  SRMgr_getADC1mV());
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_ADC1, sizeof(v), v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_ADC1, 2, v);
+        SRMgr_updateADC1();        // for 'significant' change test
     }
     if (SRMgr_hasADC2Changed()) {
+        dataChanged = true;
         // get adc 2
-        uint8_t v[2];
         Util_writeLE_uint16_t(v, 0, SRMgr_getADC2mV());
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_ADC2, sizeof(v), v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_ADC2, 2, v);
+        SRMgr_updateADC2();        // for 'significant' change test
     }
     // get micro if noise detected
-    if (forceULData || SRMgr_getLastNoiseTimeSecs() >= AppCore_lastULTime()) {
-        uint8_t v[6];
+    if (SRMgr_getLastNoiseTimeSecs() >= AppCore_lastULTime()) {
+        dataChanged = true;
         /* equivalent structure but we explicitly pack our data
         struct {
             uint32_t time;
@@ -211,12 +215,12 @@ static bool getData(APP_CORE_UL_t* ul) {
         Util_writeLE_uint32_t(v, 0, SRMgr_getLastNoiseTimeSecs());
         v[4] = SRMgr_getNoiseFreqkHz();
         v[5] = SRMgr_getNoiseLeveldB();
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_NOISE, sizeof(v), v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_NOISE, 6, v);
     }
 
     // get button
-    if (forceULData || ((SRMgr_getLastButtonPressTS()/1000) >= AppCore_lastULTime())) {
-        uint8_t v[10];
+    if (((SRMgr_getLastButtonPressTS()/1000) >= AppCore_lastULTime())) {
+        dataChanged = true;
         /* equivalent structure but we explicitly pack our data
         struct {
             uint32_t pressTS;
@@ -229,9 +233,10 @@ static bool getData(APP_CORE_UL_t* ul) {
         Util_writeLE_uint32_t(v, 4, SRMgr_getLastButtonReleaseTS());
         v[8]= SRMgr_getButton();
         v[9] = SRMgr_getLastButtonPressType();
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_BUTTON, sizeof(v), v);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_BUTTON, 10, v);
+        SRMgr_updateButton();
     }
-    return SRMgr_updateEnvs(forceULData);     // update those that changed as we have added them to the UL... and return the flag that says if any changed
+    return (forceULData || dataChanged);     // return the flag that says if any changed
 }
 
 static APP_CORE_API_t _api = {
@@ -293,5 +298,5 @@ static void buttonChangeCB(void* ctx, SR_BUTTON_STATE_t currentState, SR_BUTTON_
 // Get debug data in next UL
 static void A_getdebug(uint8_t* v, uint8_t l) {
     log_info("AC:action GETDEBUG");    
-    //_ctx.sentRebootInfo=1;      // so it gets sent in next UL one time
+    _ctx.sentRebootInfo=1;      // so it gets sent in next UL one time
 }
