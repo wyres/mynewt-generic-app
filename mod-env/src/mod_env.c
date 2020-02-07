@@ -175,8 +175,8 @@ static bool getData(APP_CORE_UL_t* ul) {
     // Note : do temp and pressure together as linked
     if (forceULData || SRMgr_hasTempChanged() || SRMgr_hasPressureChanged()) {
         dataChanged = true;
-        // get temperature
-        Util_writeLE_int16_t(v, 0, SRMgr_getTempdC());
+        // get temperature in 1/100 C
+        Util_writeLE_int16_t(v, 0, SRMgr_getTempcC());
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_TEMP, 2, v);
         SRMgr_updateTemp();        // for 'significant' change test
 
