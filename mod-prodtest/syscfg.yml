@@ -1,0 +1,10 @@
+syscfg.defs:
+  DCARD_BLE:
+    description : "set to 1 to test a BLE only dcard"
+    value: 0
+
+  DCARD_BLEGPS:
+    description : "set to 1 to test a BLE+GPS dcard"
+    value: 0
+    
+syscfg.vals:

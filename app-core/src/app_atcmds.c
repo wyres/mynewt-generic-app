@@ -322,7 +322,7 @@ static ATRESULT atcmd_selftest(uint8_t nargs, char* argv[]) {
     SRMgr_start();
     // delay a little
     // check accelero  
-    wconsole_println("ACCEL:%s", (MMMgr_check())?"OK":"NOK");
+    wconsole_println("ACCEL:%s", (MMMgr_start() && MMMgr_check())?"OK":"NOK");
     // ? SX1272?
     wconsole_println("BATT[%d]:%s",SRMgr_getBatterymV(), (SRMgr_getBatterymV()>2000 && SRMgr_getBatterymV()<4000)?"OK":"NOK");
     wconsole_println("ALTI[%d]:%s", SRMgr_getPressurePa(), (SRMgr_getPressurePa()>90000 && SRMgr_getPressurePa()<120000)?"OK":"NOK");
