@@ -204,6 +204,7 @@ static struct {
     uint8_t maxExitPerUL;
     uint8_t presenceMinorMSB;
     ibeacon_data_t iblist[MAX_BLE_TRACKED];
+    uint8_t bleErrorMask;
     uint8_t tcount[BLE_NTYPES];
 //    uint8_t cborbuf[MAX_BLE_ENTER*6];
 } _ctx;
@@ -255,6 +256,7 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
     switch(e) {
         case WBLE_COMM_FAIL: {
             log_debug("MBT: comm nok");
+            _ctx.bleErrorMask |= EM_BLE_COMM_FAIL;
             break;
         }
         case WBLE_COMM_OK: {
@@ -283,6 +285,9 @@ static uint32_t start() {
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_MAX_ENTER_PER_UL, &_ctx.maxEnterPerUL, 1, 255);
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_MAX_EXIT_PER_UL, &_ctx.maxExitPerUL, 1, 255);
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_PRESENCE_MINOR, &_ctx.presenceMinorMSB, 0, 255);
+
+    // no errors yet
+    _ctx.bleErrorMask = 0;
 
     // and tell ble to go with a callback to tell me when its got something
     wble_start(_ctx.wbleCtx, ble_cb);
@@ -323,13 +328,16 @@ static bool getData(APP_CORE_UL_t* ul) {
     int maxMinorIdPresence = -1;        // to work out if we see any, and if so, the max id seen (to economise space)
     uint16_t majorPresence=0;         // Normally we expect all presence guys to have same major...
 
-    uint8_t bleErrorMask = 0;
     uint32_t now = TMMgr_getRelTimeSecs();
     
     // reset countables counts
     memset(&_ctx.tcount[0], 0, sizeof(_ctx.tcount));
-
-    log_debug("MBT: proc %d active BLE", wble_getNbIBActive(_ctx.wbleCtx,0));
+    // Check if table is full.
+    int nActive = wble_getNbIBActive(_ctx.wbleCtx,0);
+    log_debug("MBT: proc %d active BLE", nActive);
+    if (nActive==MAX_BLE_TRACKED) {
+        _ctx.bleErrorMask |= EM_BLE_TABLE_FULL;        
+    }
     // for each one seen, check its type, flagging new ones, doing the count, etc
     for(int i=0;i<MAX_BLE_TRACKED;i++) {
         if (_ctx.iblist[i].lastSeenAt>0) {      // its a valid entry
@@ -337,6 +345,7 @@ static bool getData(APP_CORE_UL_t* ul) {
             if (bletype==BLE_TYPE_NAV) {
                 // ignore, shouldn't happen as the scanner was told to ignore these guys
                 log_warn("MBT:remove unex NAV type");
+                _ctx.bleErrorMask |= EM_BLE_RX_BADMAJ;
                 // Free up his space
                 _ctx.iblist[i].lastSeenAt=0;
             } else if (bletype==BLE_TYPE_ENTEREXIT) {
@@ -393,6 +402,7 @@ static bool getData(APP_CORE_UL_t* ul) {
             } else {
                 // ignore, shouldn't happen as the scanner was told to ignore these guys
                 log_warn("MBT:remove unex type=%d", bletype);
+                _ctx.bleErrorMask |= EM_BLE_RX_BADMAJ;
                 // Free up the space
                 _ctx.iblist[i].lastSeenAt=0;
             }
@@ -442,6 +452,7 @@ static bool getData(APP_CORE_UL_t* ul) {
                         if ((bytesInUL = app_core_msg_ul_requestNextUL(ul)) <= 0) {
                             // no more messages, sorry
                             log_debug("MBN: unexpected no next UL still got %d",(nbExitToAdd-nbAdded));
+                            _ctx.bleErrorMask |= EM_UL_NONEXTUL;
                             break;      // from for, we're done here
                         }
                     }
@@ -469,6 +480,7 @@ static bool getData(APP_CORE_UL_t* ul) {
                 } else {
                     // this should not happen if the previous calculations were correct...
                     log_debug("MBN: unexpected no space in UL for %d",nbThisUL);
+                    _ctx.bleErrorMask |= EM_UL_NOSPACE;
                     break;
                 }
             }
@@ -493,6 +505,7 @@ static bool getData(APP_CORE_UL_t* ul) {
                         if ((bytesInUL = app_core_msg_ul_requestNextUL(ul)) <= 0) {
                             // no more messages, sorry
                             log_debug("MBN: unexpected no next UL still got enter %d",(nbEnterToAdd-nbAdded));
+                            _ctx.bleErrorMask |= EM_UL_NONEXTUL;
                             break;      // from for, we're done here
                         }
                     }
@@ -521,6 +534,7 @@ static bool getData(APP_CORE_UL_t* ul) {
                 } else {
                     // this should not happen if the previous calculations were correct...
                     log_debug("MBN: no space in UL for enter %d",nbThisUL);
+                    _ctx.bleErrorMask |= EM_UL_NOSPACE;
                     break;
                 }
             }
@@ -543,6 +557,7 @@ static bool getData(APP_CORE_UL_t* ul) {
                         if ((bytesInUL = app_core_msg_ul_requestNextUL(ul)) <= 0) {
                             // no more messages, sorry
                             log_debug("MBN: unexpected no next UL still got type %d",(nbTypesToAdd-nbAdded));
+                            _ctx.bleErrorMask |= EM_UL_NONEXTUL;
                             break;      // from for, we're done here
                         }
                     }
@@ -566,6 +581,7 @@ static bool getData(APP_CORE_UL_t* ul) {
                 } else {
                     // this should not happen if the previous calculations were correct...
                     log_debug("MBN: no space in UL for types %d",nbThisUL);
+                    _ctx.bleErrorMask |= EM_UL_NOSPACE;
                     break;
                 }
             }
@@ -633,11 +649,12 @@ static bool getData(APP_CORE_UL_t* ul) {
     }
 */
     // If error like tracking list is full and we failed to see a enter/exit guy, flag it up...
-    if (bleErrorMask!=0) {
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_ERRORMASK, 1, &bleErrorMask);
+    if (_ctx.bleErrorMask!=0) {
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_ERRORMASK, 1, &_ctx.bleErrorMask);
     }
-    log_info("MBT:UL enter %d/%d exit %d/%d types %d/%d/%d, maxPId %d err %02x", nbEnter, nbEnterToAdd, nbExit, nbExitToAdd, nbCount, nbTypes, nbTypesToAdd, maxMinorIdPresence, bleErrorMask);
-//    return (nbEnterToAdd>0 || nbExitToAdd>0 || nbTypesToAdd>0 || bleErrorMask!=0);
+    log_info("MBT:UL enter %d/%d exit %d/%d types %d/%d/%d, maxPId %d err %02x", 
+        nbEnter, nbEnterToAdd, nbExit, nbExitToAdd, nbCount, nbTypes, nbTypesToAdd, maxMinorIdPresence, _ctx.bleErrorMask);
+//    return (nbEnterToAdd>0 || nbExitToAdd>0 || nbTypesToAdd>0 || _ctx.bleErrorMask!=0);
     return true;        // always gotta send UL as 'no BLEs seen' is also important!
 }
 

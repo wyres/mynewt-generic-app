@@ -34,6 +34,7 @@
 static struct {
     void* wbleCtx;
     uint8_t maxNavPerUL;
+    uint8_t bleErrorMask;
     ibeacon_data_t iblist[MAX_BLE_TOSCAN];
     ibeacon_data_t bestiblist[MAX_BLE_TOSEND];
 } _ctx;     // inited to 0 by definition
@@ -43,6 +44,7 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
     switch(e) {
         case WBLE_COMM_FAIL: {
             log_debug("MBN: comm nok");
+            _ctx.bleErrorMask |= EM_BLE_COMM_FAIL;
             break;
         }
         case WBLE_COMM_OK: {
@@ -67,6 +69,9 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
 static uint32_t start() {
     // Get max BLEs, validate value is ok to avoid issues...
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_MAX_NAV_PER_UL, &_ctx.maxNavPerUL, 1, MAX_BLE_TOSEND);
+
+    // no errors yet
+    _ctx.bleErrorMask = 0;
 
     // and tell ble to go with a callback to tell me when its got something
     wble_start(_ctx.wbleCtx, ble_cb);
@@ -96,6 +101,13 @@ static bool getData(APP_CORE_UL_t* ul) {
     // we have knowledge of 2 types of ibeacons
     // - 'fixed navigation' type (sparsely deployed, we shouldn't see many, only send up best rssi ones)
     // - 'mobile tag' type : may congregate in areas so we see a lot of them. In this case, we do in/out notifications
+        // Check if table is full.
+    int nActive = wble_getNbIBActive(_ctx.wbleCtx,0);
+    log_debug("MBN: proc %d active BLE", nActive);
+    if (nActive==MAX_BLE_TOSCAN) {
+        _ctx.bleErrorMask |= EM_BLE_TABLE_FULL;        
+    }
+
     // This module is concerned with the fixed navigation ones - we sent up a short 'best rsssi' list every time
     // Get list of ibs in order into this array please
     int nbSent = wble_getSortedIBList(_ctx.wbleCtx, MAX_BLE_TOSEND, _ctx.bestiblist);
@@ -122,7 +134,12 @@ static bool getData(APP_CORE_UL_t* ul) {
         // add empty TLV to signal we scanned but didnt see them
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_CURR, 0, NULL);
     }
-    log_info("MBN:UL saw %d sent best %d", wble_getNbIBActive(_ctx.wbleCtx, 0), nbSent);
+        // If error like tracking list is full and we failed to see a enter/exit guy, flag it up...
+    if (_ctx.bleErrorMask!=0) {
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_ERRORMASK, 1, &_ctx.bleErrorMask);
+    }
+
+    log_info("MBN:UL saw %d sent best %d err %02x", wble_getNbIBActive(_ctx.wbleCtx, 0), nbSent, _ctx.bleErrorMask);
 //    return (nbSent>0);
     return true;        // always gotta send UL as 'no BLEs seen' is also important!
 }

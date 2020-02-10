@@ -99,12 +99,14 @@ static bool getData(APP_CORE_UL_t* ul) {
             uint8_t maj;
             uint8_t min;
             uint16_t buildNb;
+            uint32_t targetNameHash;
         } */
         v[0] = (uint8_t)(fw->fwmaj);
         v[1] = (uint8_t)(fw->fwmin);
         v[2] = (uint8_t)(fw->fwbuild & 0xff);
         v[3] = (uint8_t)((fw->fwbuild & 0xff00) >> 8);
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_VERSION, 4, v);
+        Util_writeLE_uint32_t(v, 4, Util_hashstrn(fw->fwname, MAXFWNAME));
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_VERSION, 8, v);
         forceULData = true;     // as we sent debug
     }
     //log_debug("GP:finalForce: %s",forceULData ? "true" : "false");

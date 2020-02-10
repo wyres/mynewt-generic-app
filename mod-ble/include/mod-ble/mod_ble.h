@@ -26,6 +26,18 @@ extern "C" {
 #define BLE_TYPE_ENTEREXIT   (0x80)
 #define BLE_TYPE_PRESENCE   (0x81)
 
+// BLE error bitmasks
+// BLE comm failed
+#define EM_BLE_COMM_FAIL    (0x01)
+// BLE scanner gave us majors we didn't ask for
+#define EM_BLE_RX_BADMAJ    (0x02)
+// No space (no next UL or no space in this UL)
+#define EM_UL_NONEXTUL      (0x04)
+#define EM_UL_NOSPACE       (0x08)
+// BLE historical table is full (which may lead to missing targets in scan)
+#define EM_BLE_TABLE_FULL   (0x10)
+
+
 #ifdef __cplusplus
 }
 #endif
