@@ -31,11 +31,13 @@
 // how long till we remove them out of history? For navigation, we keep no history between scans generally, as backend deals with history
 #define MAX_BEACON_TIMEOUT_SECS (60)
 
+
 static struct {
     void* wbleCtx;
     uint8_t maxNavPerUL;
     ibeacon_data_t iblist[MAX_BLE_TOSCAN];
     ibeacon_data_t bestiblist[MAX_BLE_TOSEND];
+    uint8_t uuid[UUID_SZ];
 } _ctx;     // inited to 0 by definition
 
 /** callback fns from BLE generic package */
@@ -48,7 +50,7 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
         case WBLE_COMM_OK: {
             log_debug("MBN: comm ok");
             // Scan selecting only majors between 0x0000 and 0x00FF ie short range
-            wble_scan_start(_ctx.wbleCtx, NULL, (BLE_TYPE_NAV<<8), ((BLE_TYPE_NAV<<8)+0xFF), MAX_BLE_TOSCAN, &_ctx.iblist[0]);
+            wble_scan_start(_ctx.wbleCtx, _ctx.uuid, (BLE_TYPE_NAV<<8), ((BLE_TYPE_NAV<<8)+0xFF), MAX_BLE_TOSCAN, &_ctx.iblist[0]);
             break;
         }
         case WBLE_SCAN_RX_IB: {
@@ -73,6 +75,7 @@ static uint32_t start() {
     // Return the scan time
     uint32_t bleScanTimeMS = 3000;
     CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_BLE_SCAN_TIME_MS, &bleScanTimeMS, 1000, 60000);
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_UUID, &_ctx.uuid, UUID_SZ);
 
     return bleScanTimeMS;
 }
