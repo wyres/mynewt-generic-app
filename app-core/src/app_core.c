@@ -1010,20 +1010,6 @@ static SM_STATE_t _mySM[MS_LAST] = {
     {.id = MS_SENDING_UL, .name = "SendingUL", .fn = State_SendingUL},
 };
 
-// Return true if data block is not just 0's, false if it is
-static bool notAll0(uint8_t *p, uint8_t sz)
-{
-    assert(p != NULL);
-    for (int i = 0; i < sz; i++)
-    {
-        if (*(p + i) != 0x00)
-        {
-            return true;
-        }
-    }
-    return false;
-}
-
 // Called to start the action, after all sysinit done
 void app_core_start(int fwmaj, int fwmin, int fwbuild, const char *fwdate, const char *fwname)
 {
@@ -1064,11 +1050,11 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char *fwdate, const
     _ctx.deviceConfigOk = true;
     // devEUI is critical : default is all 0s -> not configured
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_DEVEUI, &_ctx.loraCfg.deveui, 8);
-    _ctx.deviceConfigOk &= notAll0(&_ctx.loraCfg.deveui[0], 8);
+    _ctx.deviceConfigOk &= Util_notAll0(&_ctx.loraCfg.deveui[0], 8);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_APPEUI, &_ctx.loraCfg.appeui, 8);
     // appKey is critical
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_APPKEY, &_ctx.loraCfg.appkey, 16);
-    _ctx.deviceConfigOk &= notAll0(&_ctx.loraCfg.appkey[0], 16);
+    _ctx.deviceConfigOk &= Util_notAll0(&_ctx.loraCfg.appkey[0], 16);
     //    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_DEVADDR, &_ctx.loraCfg.devAddr, sizeof(uint32_t));
     //    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_NWKSKEY, &_ctx.loraCfg.nwkSkey, 16);
     //    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_APPSKEY, &_ctx.loraCfg.appSkey, 16);

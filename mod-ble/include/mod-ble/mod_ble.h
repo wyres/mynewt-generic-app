@@ -25,6 +25,7 @@ extern "C" {
 #define BLE_TYPE_COUNTABLE_END   (0x7F)
 #define BLE_TYPE_ENTEREXIT   (0x80)
 #define BLE_TYPE_PRESENCE   (0x81)
+#define UUID_SZ (16)
 
 // BLE error bitmasks
 // BLE comm failed

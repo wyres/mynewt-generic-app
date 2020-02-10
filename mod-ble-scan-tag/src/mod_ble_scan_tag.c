@@ -197,6 +197,8 @@ static ibeacon_data_t STATIC_TEST_IBLIST_COUNT[] = {
 
 #define BLE_NTYPES ((BLE_TYPE_COUNTABLE_END-BLE_TYPE_COUNTABLE_START)+1)
 // don't want these on the stack, and trying to avoid malloc
+
+
 static struct {
     void* wbleCtx;
     uint8_t exitTimeoutMins;
@@ -206,6 +208,7 @@ static struct {
     ibeacon_data_t iblist[MAX_BLE_TRACKED];
     uint8_t bleErrorMask;
     uint8_t tcount[BLE_NTYPES];
+    uint8_t uuid[UUID_SZ];
 //    uint8_t cborbuf[MAX_BLE_ENTER*6];
 } _ctx;
 #if 0
@@ -262,7 +265,7 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
         case WBLE_COMM_OK: {
             log_debug("MBT: comm ok");
             // Scan for both countable and enter/exit types. Note calculation of major range depends on the BLE_TYPExXX values being contigous...
-            wble_scan_start(_ctx.wbleCtx, NULL, (BLE_TYPE_COUNTABLE_START<<8), (BLE_TYPE_PRESENCE<<8) + 0xFF, MAX_BLE_TRACKED, &_ctx.iblist[0]);
+            wble_scan_start(_ctx.wbleCtx, _ctx.uuid, (BLE_TYPE_COUNTABLE_START<<8), (BLE_TYPE_PRESENCE<<8) + 0xFF, MAX_BLE_TRACKED, &_ctx.iblist[0]);
             break;
         }
         case WBLE_SCAN_RX_IB: {
@@ -294,6 +297,9 @@ static uint32_t start() {
     // Return the scan time (checking config is ok)
     uint32_t bleScanTimeMS = 3000;
     CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_BLE_SCAN_TIME_MS, &bleScanTimeMS, 1000, 60000);
+    
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_UUID, &_ctx.uuid, UUID_SZ);
+
 
     return bleScanTimeMS;
 }
