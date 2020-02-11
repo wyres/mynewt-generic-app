@@ -35,6 +35,8 @@
 #define MOD_MASK_SZ ((APP_MOD_LAST / 8) + 1)
 // The timeout before leaving UL sending state. Should be big enough to allow any DL to have arrived
 #define UL_WAIT_DL_TIMEOUTMS (20000)
+// Delay between deciding on stock mode and actually entering the deep sleep, during which leds are on to signal to user
+#define STOCK_MODE_DELAY_SECS (5)
 
 // State machine for core app
 // COntext data
@@ -135,6 +137,35 @@ typedef enum
 static void registerActions();
 static void executeDL(struct appctx *ctx, APP_CORE_DL_t *data);
 
+static void enterStockMode(struct appctx *ctx) {
+    // To enter stock mode, we reboot with a specific reboot reason, and the rebootmgr will
+    // do the enter. This ensures that if the MCU internal watchdog timer is running, it will
+    // be disabled (example: STM32 IWDG timer cannot be stopped once started, and runs even in STOP/STANDBY modes)
+    RMMgr_reboot(RM_ENTER_STOCK_MODE);      
+
+#ifdef NOTUSED    
+    // Push all modules into deepsleep, active or not
+    for (int i = 0; i < ctx->nMods; i++)
+    {
+        if (ctx->mods[i].api->offCB != NULL)
+        {
+            (*(ctx->mods[i].api->offCB))();
+        }
+    }
+    // LEDs off, we are sleeping
+    ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
+    ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
+    // and stay idle in deep sleep this time
+    LPMgr_setLPMode(ctx->lpUserId, LP_OFF);
+
+    // close logging uart if active
+    log_deinit_uart();
+
+    // function that puts the device in full stop/reboot mode with the only exit possible being POR or NRST pin
+    hal_bsp_halt();
+    // not expected to return here
+#endif
+}
 // Callback from config mgr when the actived modules mask changes
 static void configChangedCB(uint16_t key)
 {
@@ -417,29 +448,14 @@ static SM_STATE_ID_t State_Stock(void *arg, int e, void *data)
     {
     case SM_ENTER:
     {
-        log_debug("AC:stock forever");
-        // Record time
-        ctx->idleStartTS = TMMgr_getRelTimeSecs();
-        // Push all modules into deepsleep, active or not
-        for (int i = 0; i < ctx->nMods; i++)
-        {
-            if (ctx->mods[i].api->offCB != NULL)
-            {
-                (*(ctx->mods[i].api->offCB))();
-            }
-        }
-        // LEDs off, we are sleeping
-        ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
-        ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
-        // and stay idle in deep sleep this time
-        LPMgr_setLPMode(ctx->lpUserId, LP_OFF);
-
-        // close logging uart if active
-        log_deinit_uart();
-
-        // function that puts the device in full stop/reboot mode with the only exit possible being POR or NRST pin
-        hal_bsp_halt();
-        // not expected to return here
+        log_warn("AC:stock mode");
+        // Before entering stock mode, we leave a small window in which it is possible to connect to the device
+        // JTAG port to update firmware/config (as in the stock mode MCU low power this may not be possible)
+        // During this time we will put leds on permantently to signal this to user 
+        // (for 1s less than the timeout to let ledmgr go idle before deep sleep)
+        ledStart(MYNEWT_VAL(MODS_ACTIVE_LED), FLASH_ON, STOCK_MODE_DELAY_SECS-1);
+        ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_ON, STOCK_MODE_DELAY_SECS-1);
+        sm_timer_start(ctx->mySMId, STOCK_MODE_DELAY_SECS*1000);      // till zombie
         return SM_STATE_CURRENT;
     }
     case SM_EXIT:
@@ -452,6 +468,9 @@ static SM_STATE_ID_t State_Stock(void *arg, int e, void *data)
     }
     case SM_TIMEOUT:
     {
+        enterStockMode(ctx);
+        // Will not return normally
+        assert(0);
         return SM_STATE_CURRENT;
     }
     default:
