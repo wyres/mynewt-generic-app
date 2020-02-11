@@ -1255,7 +1255,7 @@ static void A_setConfig(uint8_t *v, uint8_t l)
     }
     else
     {
-        log_warn("AC:action SETCONFIG (%d) to %d len value FAILS as expected len is ", key, (l - 2), exlen);
+        log_warn("AC:action SETCONFIG (%d) to %d len value FAILS as expected len is %d", key, (l - 2), exlen);
     }
 }
 
