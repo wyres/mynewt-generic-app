@@ -35,6 +35,7 @@
 static struct appctx {
     uint32_t goodFixCnt;
     uint8_t fixDemanded;   // did we get a DL action asking for a fix?
+    uint8_t fixMode;        // operating mode
     bool doFix;             // did we try to do a fix this round?
     uint32_t triedAtS;      // TS of last try
     gps_data_t goodFix;     // good (merged) fix
@@ -136,18 +137,18 @@ static uint32_t start() {
     uint32_t coldStartTime=2*60;
     uint32_t warmStartTime=60;
     uint8_t powermode = POWER_ONOFF;     
-    uint8_t fixmode = FIX_ALWAYS; // FIX_ON_DEMAND;
+    _ctx.fixMode = FIX_ALWAYS; // FIX_ON_DEMAND;
     CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_GPS_COLD_TIME_SECS, &coldStartTime, 10, 15*60);
     CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_GPS_WARM_TIME_SECS, &warmStartTime, 1, 15*60);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_GPS_POWER_MODE, &powermode, sizeof(uint8_t));
     gps_setPowerMode(powermode);
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_GPS_FIX_MODE, &fixmode, sizeof(uint8_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_GPS_FIX_MODE, &_ctx.fixMode, sizeof(uint8_t));
 
     int32_t fixagemins = gps_lastGPSFixAgeMins();
     uint32_t gpstimeoutsecs = 1;        // 1 second if we don't decide to do a fix
     _ctx.doFix = false;
     // TODO conditions of movement vs fixmode
-    switch(fixmode) {
+    switch(_ctx.fixMode) {
         case FIX_WHILE_MOVING: {
             // if last moved time < fix age, do fix
             if (MMMgr_hasMovedSince(gps_lastGPSFixTimeSecs())) {
@@ -156,7 +157,7 @@ static uint32_t start() {
             break;
         }
         case FIX_ON_STOP: {
-            // if last moved time > 5 mins ago, and fix time before last moved time, do fix
+            // if last moved time > 5 mins ago (ie we stopped moving), and fix time before last moved time (ie is before we stopped), do fix
             if (MMMgr_hasMovedSince(gps_lastGPSFixTimeSecs()) &&
                     ((TMMgr_getRelTimeSecs() - MMMgr_getLastMovedTime()) > 5*60)) {
                 _ctx.doFix = true;
@@ -224,7 +225,8 @@ static void deepsleep() {
     // nothing to do
 }
 static bool getData(APP_CORE_UL_t* ul) {
-    if (_ctx.doFix) {
+    // If we tried to get a fix, or if we are in 'on stop' mode, then inform backend of the fix or lack thereof
+    if (_ctx.doFix || _ctx.fixMode==FIX_ON_STOP) {
         // Did we get a fix this time?
         if (_ctx.goodFix.rxAt!=0) {
             // UL structure, explicitly written to avoid compilier decisions on padding etc
@@ -243,7 +245,8 @@ static bool getData(APP_CORE_UL_t* ul) {
             Util_writeLE_int32_t(v, 12, _ctx.goodFix.prec);
             Util_writeLE_uint32_t(v, 16, _ctx.goodFix.rxAt);
             v[20] = _ctx.goodFix.nSats;
-            log_info("MG: UL fix %d,%d,%d p=%d from %d sats", _ctx.goodFix.lat, _ctx.goodFix.lon, _ctx.goodFix.alt, _ctx.goodFix.prec, _ctx.goodFix.nSats);
+            log_info("MG: @%d UL fix %d,%d,%d p=%d from %d sats", 
+                _ctx.goodFix.rxAt, _ctx.goodFix.lat, _ctx.goodFix.lon, _ctx.goodFix.alt, _ctx.goodFix.prec, _ctx.goodFix.nSats);
             // Log this position with timestamp (can be retrieved with DL action)
             logGPSPosition(&_ctx.goodFix);
         } else {

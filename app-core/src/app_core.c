@@ -929,16 +929,7 @@ static SM_STATE_ID_t State_SendingUL(void *arg, int e, void *data)
     {
         if (data != NULL)
         {
-            APP_CORE_DL_t *rxmsg = (APP_CORE_DL_t *)data;
-            // Execute actions if the dlid is not the last one we did
-            if (rxmsg->dlId != ctx->lastDLId)
-            {
-                executeDL(ctx, rxmsg);
-            }
-            else
-            {
-                log_debug("AC:ignore DL actions repeat id (%d)", rxmsg->dlId);
-            }
+            executeDL(ctx, (APP_CORE_DL_t *)data);
         }
         return SM_STATE_CURRENT;
     }
@@ -1230,17 +1221,30 @@ void AppCore_module_done(APP_MOD_ID_t id)
 // Internals : action handling
 static void executeDL(struct appctx *ctx, APP_CORE_DL_t *data)
 {
-    if (app_core_msg_dl_execute(data))
+    // Execute actions only if the dlid is not the last one we did, OR always if it is 0 (ie backend does not handle dlid)
+    if (data->dlId==0 || data->dlId != ctx->lastDLId)
     {
-        log_info("AC: exec DL ok id now %d", data->dlId);
-        // Can update last dl id since we did its actions
-        ctx->lastDLId = data->dlId;
-        // Store in case we reboot
-        CFMgr_setElement(CFG_UTIL_KEY_DL_ID, &ctx->lastDLId, sizeof(uint8_t));
+        if (app_core_msg_dl_execute(data))
+        {
+            // If the id in the DL was 0, we don't update as this was not a 'controlled' case
+            if (data->dlId!=0) {
+                log_info("AC: exec DL ok id now %d", data->dlId);
+                // Can update last dl id since we did its actions
+                ctx->lastDLId = data->dlId;
+                // Store in case we reboot
+                CFMgr_setElement(CFG_UTIL_KEY_DL_ID, &ctx->lastDLId, sizeof(uint8_t));
+            } else {
+                log_info("AC: exec DL id 0, current last dlId was %d", ctx->lastDLId);
+            }
+        }
+        else
+        {
+            log_warn("AC: DL with id %d not exec OK??", data->dlId);
+        }
     }
     else
     {
-        log_warn("AC: DL not exec OK");
+        log_debug("AC:ignore DL actions repeat id (%d)", data->dlId);
     }
 }
 
