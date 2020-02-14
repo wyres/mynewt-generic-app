@@ -38,7 +38,7 @@ static ATRESULT atcmd_hello(uint8_t nargs, char* argv[]) {
 }
 static ATRESULT atcmd_who(uint8_t nargs, char* argv[]) {
     APP_CORE_FW_t* fwinfo = AppCore_getFwInfo();
-    wconsole_println("AppCore:%s", fwinfo->fwname);
+    wconsole_println("AppCore:%s (%lu)", fwinfo->fwname, Util_hashstrn(fwinfo->fwname, MAXFWNAME));
     wconsole_println("Build v%d/%d.%d @%s", fwinfo->fwmaj, fwinfo->fwmin, fwinfo->fwbuild, fwinfo->fwdate);
 
     return ATCMD_OK;
