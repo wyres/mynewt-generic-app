@@ -281,9 +281,9 @@ void mod_gps_init(void) {
     // initialise access to GPS
     gps_mgr_init(MYNEWT_VAL(MOD_GPS_UART), MYNEWT_VAL(MOD_GPS_UART_BAUDRATE), MYNEWT_VAL(MOD_GPS_PWRIO), MYNEWT_VAL(MOD_GPS_UART_SELECT));
     // hook app-core for gps operation
-    AppCore_registerModule(APP_MOD_GPS, &_api, EXEC_SERIAL);
+    AppCore_registerModule("GPS", APP_MOD_GPS, &_api, EXEC_SERIAL);
     // Register for the gps action(s)
-    AppCore_registerAction("GPS", APP_CORE_DL_FIX_GPS, &A_fixgps);
+    AppCore_registerAction(APP_CORE_DL_FIX_GPS, &A_fixgps);
 //    log_debug("mod-gps inited");
 }
 
