@@ -55,7 +55,9 @@ typedef enum { APP_MOD_ENV=0, APP_MOD_GPS=1, APP_MOD_BLE_SCAN_NAV=2, APP_MOD_BLE
 // Should module be run in parallel with others, or must it be alone (eg coz using a shared resource like a bus)?
 typedef enum { EXEC_PARALLEL, EXEC_SERIAL } APP_MOD_EXEC_t;
 // core api for modules
-void AppCore_registerModule(APP_MOD_ID_t id, APP_CORE_API_t* mcbs, APP_MOD_EXEC_t execType);
+void AppCore_registerModule(const char * name, APP_MOD_ID_t id, APP_CORE_API_t* mcbs, APP_MOD_EXEC_t execType);
+// Get a module's name
+const char* AppCore_getModuleName(APP_MOD_ID_t mid);
 // is module active?
 bool AppCore_getModuleState(APP_MOD_ID_t mid);
 // set module active/not active

@@ -176,7 +176,7 @@ static APP_CORE_API_t _api = {
 // Initialise module
 void mod_prodtest_init(void) {
     // hook app-core for implication in round data collection (stealing the PTI module's id here)
-    AppCore_registerModule(APP_MOD_PTI, &_api, EXEC_PARALLEL);
+    AppCore_registerModule("PRODTEST", APP_MOD_PTI, &_api, EXEC_PARALLEL);
 
 //    log_debug("MP:initialised");
 }

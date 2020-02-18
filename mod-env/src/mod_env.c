@@ -274,7 +274,7 @@ void mod_env_init(void) {
         CFMgr_getOrAddElementCheckRangeINT32(CFG_UTIL_KEY_ENV_PRESSURE_OFFSET, &_ctx.pressureOffsetPa, -10000, 10000);
     }
     // hook app-core for env data
-    AppCore_registerModule(APP_MOD_ENV, &_api, EXEC_PARALLEL);
+    AppCore_registerModule("ENV", APP_MOD_ENV, &_api, EXEC_PARALLEL);
     // an action
     AppCore_registerAction(APP_CORE_DL_GET_DEBUG, &A_getdebug);
 

@@ -48,6 +48,7 @@ static struct appctx
     uint8_t nMods;
     struct
     {
+        const char* name;
         APP_MOD_ID_t id;
         APP_MOD_EXEC_t exec;
         APP_CORE_API_t *api;
@@ -273,7 +274,7 @@ static void lora_rx_cb(void *userctx, LORAWAN_RESULT_t res, uint8_t port, int rs
     }
     else
     {
-        log_debug("AC:lora rx BAD sz %d b0/1 %02x:%02x", sz, ((uint8_t *)msg)[0], ((uint8_t *)msg)[1]);
+        log_warn("AC:lora rx BAD sz %d b0/1 %02x:%02x", sz, ((uint8_t *)msg)[0], ((uint8_t *)msg)[1]);
     }
 }
 // SM state functions
@@ -752,12 +753,12 @@ static SM_STATE_ID_t State_GettingSerialMods(void *arg, int e, void *data)
                     {
                         // start timeout for current mod to get their data
                         sm_timer_start(ctx->mySMId, timeReqd);
-                        log_debug("AC:Smod [%d] for %d ms", ctx->mods[i].id, timeReqd);
+                        log_debug("AC:Smod [%s] for %d ms", AppCore_getModuleName(i), timeReqd);
                         return SM_STATE_CURRENT;
                     }
                     else
                     {
-                        log_debug("AC:Smod [%d] says not this cycle", ctx->mods[i].id);
+                        log_debug("AC:Smod [%s] says not this cycle", AppCore_getModuleName(i));
                     }
                 }
             }
@@ -1072,8 +1073,8 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char *fwdate, const
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_ACKEN, &_ctx.loraCfg.useAck, sizeof(bool));
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_LORA_SF, &_ctx.loraCfg.loraSF, LORAWAN_SF7, LORAWAN_SF_DEFAULT);
     CFMgr_getOrAddElementCheckRangeINT8(CFG_UTIL_KEY_LORA_TXPOWER, &_ctx.loraCfg.txPower, -30, 22);
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_TXPORT, &_ctx.loraCfg.txPort, sizeof(uint8_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_RXPORT, &_ctx.loraCfg.rxPort, sizeof(uint8_t));
+    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_LORA_TXPORT, &_ctx.loraCfg.txPort, 1, 255);
+    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_LORA_RXPORT, &_ctx.loraCfg.rxPort, 1, 255);
     if (_ctx.deviceConfigOk) {
         // Note the api wants the ids in init -> this means if user changes in AT then they need to reboot...
         lora_api_init(&_ctx.loraCfg.deveui[0], &_ctx.loraCfg.appeui[0], &_ctx.loraCfg.appkey[0], _ctx.loraCfg.useAdr, _ctx.loraCfg.loraSF, _ctx.loraCfg.txPower);
@@ -1116,7 +1117,7 @@ APP_CORE_FW_t *AppCore_getFwInfo()
 
 // core api for modules
 // mcbs pointer must be to a static structure
-void AppCore_registerModule(APP_MOD_ID_t id, APP_CORE_API_t *mcbs, APP_MOD_EXEC_t execType)
+void AppCore_registerModule(const char * name, APP_MOD_ID_t id, APP_CORE_API_t *mcbs, APP_MOD_EXEC_t execType)
 {
     assert(id < APP_MOD_LAST);
     assert(_ctx.nMods < MAX_MODS);
@@ -1126,10 +1127,19 @@ void AppCore_registerModule(APP_MOD_ID_t id, APP_CORE_API_t *mcbs, APP_MOD_EXEC_
     assert(mcbs->getULDataCB != NULL);
 
     _ctx.mods[_ctx.nMods].api = mcbs;
+    _ctx.mods[_ctx.nMods].name = name;
     _ctx.mods[_ctx.nMods].id = id;
     _ctx.mods[_ctx.nMods].exec = execType;
     _ctx.nMods++;
-    log_debug("AC: add [%d] exec[%d]", id, execType);
+//    log_debug("AC: add [%d=%s] exec[%d]", id, name, execType);
+}
+
+const char* AppCore_getModuleName(APP_MOD_ID_t mid) {
+    if (mid >= 0 && mid < APP_MOD_LAST && _ctx.mods[mid].name!=NULL)
+    {
+        return _ctx.mods[mid].name;
+    }
+    return "NA";
 }
 
 // is module active?
@@ -1222,7 +1232,7 @@ void AppCore_module_done(APP_MOD_ID_t id)
 static void executeDL(struct appctx *ctx, APP_CORE_DL_t *data)
 {
     // Execute actions only if the dlid is not the last one we did, OR always if it is 0 (ie backend does not handle dlid)
-    if (data->dlId==0 || data->dlId != ctx->lastDLId)
+    if ((data->dlId==0) || (data->dlId != ctx->lastDLId))
     {
         if (app_core_msg_dl_execute(data))
         {
@@ -1269,16 +1279,16 @@ static void A_setConfig(uint8_t *v, uint8_t l)
     {
         if (CFMgr_setElement(key, v + 2, l - 2))
         {
-            log_info("AC:action SETCONFIG (%d) to %d len value OK", key, l - 2);
+            log_info("AC:action SETCONFIG (%04x) to %d len value OK", key, l - 2);
         }
         else
         {
-            log_warn("AC:action SETCONFIG (%d) to %d len value FAILS", key, l - 2);
+            log_warn("AC:action SETCONFIG (%04x) to %d len value FAILS", key, l - 2);
         }
     }
     else
     {
-        log_warn("AC:action SETCONFIG (%d) to %d len value FAILS as expected len is %d", key, (l - 2), exlen);
+        log_warn("AC:action SETCONFIG (%04x) to %d len value FAILS as expected len is %d", key, (l - 2), exlen);
     }
 }
 
@@ -1294,7 +1304,7 @@ static void A_getConfig(uint8_t *v, uint8_t l)
     int cl = CFMgr_getElement(key, &vb[3], 16);
     if (cl > 0)
     {
-        log_info("AC:action GETCONFIG (%4x) value [", key);
+        log_info("AC:action GETCONFIG (%04x) value [", key);
         // Must give key/len as DL may request multiple!
         Util_writeLE_uint16_t(vb, 0, key);
         vb[2] = cl;
@@ -1314,7 +1324,7 @@ static void A_getConfig(uint8_t *v, uint8_t l)
     }
     else
     {
-        log_warn("AC:action GETCONFIG (%4x) no such key", key);
+        log_warn("AC:action GETCONFIG (%04x) no such key", key);
     }
 }
 static void A_fota(uint8_t *v, uint8_t l)

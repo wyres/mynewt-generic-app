@@ -283,7 +283,7 @@ void mod_gps_init(void) {
     // hook app-core for gps operation
     AppCore_registerModule(APP_MOD_GPS, &_api, EXEC_SERIAL);
     // Register for the gps action(s)
-    AppCore_registerAction(APP_CORE_DL_FIX_GPS, &A_fixgps);
+    AppCore_registerAction("GPS", APP_CORE_DL_FIX_GPS, &A_fixgps);
 //    log_debug("mod-gps inited");
 }
 

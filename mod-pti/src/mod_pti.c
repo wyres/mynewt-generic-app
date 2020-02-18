@@ -71,7 +71,7 @@ static APP_CORE_API_t _api = {
 // Initialise module
 void mod_pti_init(void) {
     // hook app-core for env data
-    AppCore_registerModule(APP_MOD_PTI, &_api, EXEC_PARALLEL);
+    AppCore_registerModule("PTI", APP_MOD_PTI, &_api, EXEC_PARALLEL);
 
     // add cb for button press, no context required
     SRMgr_registerButtonCB(buttonChangeCB, NULL);

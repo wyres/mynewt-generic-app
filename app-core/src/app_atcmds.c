@@ -227,15 +227,15 @@ static ATRESULT atcmd_getmods(uint8_t nargs, char* argv[]) {
     }
     if (nargs==1) {
         for(int i=0;i<APP_MOD_LAST;i++) {
-            wconsole_println("Module[%d]: %s", i, AppCore_getModuleState(i)?"ON":"OFF");
+            wconsole_println("Module[%d][%s]: %s", i, AppCore_getModuleName(i), AppCore_getModuleState(i)?"ON":"OFF");
         }
     } else if (nargs==2) {
         int mid = atoi(argv[1]);
         if (mid<0 || mid>=APP_MOD_LAST) {
-            wconsole_println("Module[%s] does not exist",argv[1]);
+            wconsole_println("Module id [%s] out of range",argv[1]);
             return ATCMD_BADARG;
         } else {
-            wconsole_println("Module[%d]: %s", mid, AppCore_getModuleState(mid)?"ON":"OFF");
+            wconsole_println("Module[%d][%s]: %s", mid, AppCore_getModuleName(mid), AppCore_getModuleState(mid)?"ON":"OFF");
         }
     }
 
@@ -249,7 +249,7 @@ static ATRESULT atcmd_setmod(uint8_t nargs, char* argv[]) {
     // parse key
     int mid = atoi(argv[1]);
     if (mid<0 || mid>APP_MOD_LAST) {
-        wconsole_println("Module[%s] does not exist",argv[1]);
+        wconsole_println("Module id [%s] out of range",argv[1]);
         return ATCMD_BADARG;
     }
     // parse value
@@ -261,7 +261,7 @@ static ATRESULT atcmd_setmod(uint8_t nargs, char* argv[]) {
         wconsole_println("Bad state [%s]: must be ON or OFF",argv[1]);
         return ATCMD_BADARG;
     }
-    wconsole_println("Module[%d]: %s", mid, AppCore_getModuleState(mid)?"ON":"OFF");
+    wconsole_println("Module[%d][%s]: %s", mid, AppCore_getModuleName(mid), AppCore_getModuleState(mid)?"ON":"OFF");
 
     // set and return result
     return ATCMD_OK;

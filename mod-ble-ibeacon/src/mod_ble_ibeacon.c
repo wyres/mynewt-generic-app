@@ -96,6 +96,6 @@ void mod_ble_ibeacon_init(void) {
     _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
 
     // hook app-core for ble scan - serialised as competing for UART
-    AppCore_registerModule(APP_MOD_BLE_IB, &_api, EXEC_SERIAL);
+    AppCore_registerModule("BLE-IB", APP_MOD_BLE_IB, &_api, EXEC_SERIAL);
 //    log_debug("MBB:mod-ble-scan-nav inited");
 }
