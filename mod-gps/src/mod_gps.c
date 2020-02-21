@@ -37,6 +37,7 @@ static struct appctx {
     uint8_t fixDemanded;   // did we get a DL action asking for a fix?
     uint8_t fixMode;        // operating mode
     bool doFix;             // did we try to do a fix this round?
+    bool commFail;             // did the comm fail?
     uint32_t triedAtS;      // TS of last try
     gps_data_t goodFix;     // good (merged) fix
     gps_data_t currFix;     // current fix got from mgr
@@ -84,6 +85,7 @@ static void gps_cb(GPS_EVENT_TYPE_t e) {
     switch(e) {
         case GPS_COMM_FAIL: {
             log_debug("MG: comm nok");
+            _ctx.commFail = true;
             // This means we're done
             gps_stop();
             AppCore_module_done(APP_MOD_GPS);
@@ -134,6 +136,7 @@ static void gps_cb(GPS_EVENT_TYPE_t e) {
 
 // My api functions
 static uint32_t start() {
+    _ctx.commFail = false;
     uint32_t coldStartTime=2*60;
     uint32_t warmStartTime=60;
     uint8_t powermode = POWER_ONOFF;     
@@ -183,8 +186,8 @@ static uint32_t start() {
     // TODO check global flag indicating if we got indoor loc, in this case may not want to do gps???
     // or maybe just have a short timeout?
 
-    // If didn't get a fix last time, and have not moved since last try, then no point in trying this time
-    if ( _ctx.goodFix.rxAt==0 && 
+    // If didn't get a fix last time, and have tried at least once, and have not moved since last try, then no point in trying this time
+    if ( _ctx.goodFix.rxAt==0 && _ctx.triedAtS!=0 && 
             MMMgr_hasMovedSince(_ctx.triedAtS)==false) {
         _ctx.doFix = false;
         log_debug("MG:not trying : no fix last time and no move since");
@@ -227,10 +230,11 @@ static void deepsleep() {
 static bool getData(APP_CORE_UL_t* ul) {
     // If we tried to get a fix, or if we are in 'on stop' mode, then inform backend of the fix or lack thereof
     if (_ctx.doFix || _ctx.fixMode==FIX_ON_STOP) {
-        // Did we get a fix this time?
+        // Did we get a fix this time? (or do we have one from before)
         if (_ctx.goodFix.rxAt!=0) {
             // UL structure, explicitly written to avoid compilier decisions on padding etc
             /*
+                uint8_t status;     // 0 = ok, 1 = comm error, 2 = failed to get fix, etc
                 int32_t lat;
                 int32_t lon;
                 int32_t alt;
@@ -239,20 +243,28 @@ static bool getData(APP_CORE_UL_t* ul) {
                 uint8_t nSats;      // number of satellites used for this fix
             */
             uint8_t* v = app_core_msg_ul_addTLgetVP (ul, APP_CORE_UL_GPS, 21);
-            Util_writeLE_int32_t(v, 0, _ctx.goodFix.lat);
-            Util_writeLE_int32_t(v, 4, _ctx.goodFix.lon);
-            Util_writeLE_int32_t(v, 8, _ctx.goodFix.alt);
-            Util_writeLE_int32_t(v, 12, _ctx.goodFix.prec);
-            Util_writeLE_uint32_t(v, 16, _ctx.goodFix.rxAt);
+            v[0] = GPS_COMM_OK;       // got a fix;
+            Util_writeLE_int32_t(v, 1, _ctx.goodFix.lat);
+            Util_writeLE_int32_t(v, 5, _ctx.goodFix.lon);
+            Util_writeLE_int32_t(v, 9, _ctx.goodFix.alt);
+            Util_writeLE_int32_t(v, 13, _ctx.goodFix.prec);
+            Util_writeLE_uint32_t(v, 17, _ctx.goodFix.rxAt);
             v[20] = _ctx.goodFix.nSats;
             log_info("MG: @%d UL fix %d,%d,%d p=%d from %d sats", 
                 _ctx.goodFix.rxAt, _ctx.goodFix.lat, _ctx.goodFix.lon, _ctx.goodFix.alt, _ctx.goodFix.prec, _ctx.goodFix.nSats);
             // Log this position with timestamp (can be retrieved with DL action)
             logGPSPosition(&_ctx.goodFix);
         } else {
-            log_info("MG: no fix for UL");
-            // Send empty TLV to indicate we tried, but didn't get a fix
-            app_core_msg_ul_addTLV(ul, APP_CORE_UL_GPS, 0, NULL);
+            uint8_t status = GPS_COMM_OK;
+            if (_ctx.commFail) {
+                log_info("MG: bad comm for UL");
+                status = GPS_COMM_FAIL;
+            } else {
+                log_info("MG: no fix for UL");
+                status = GPS_NO_FIX;
+            }
+            // Send TLV with 1 byte to indicate problem
+            app_core_msg_ul_addTLV(ul, APP_CORE_UL_GPS, 1, &status);
         }
         // always UL as we tried...
         return true;
