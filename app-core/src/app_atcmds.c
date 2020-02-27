@@ -248,7 +248,7 @@ static ATRESULT atcmd_setmod(uint8_t nargs, char* argv[]) {
     }
     // parse key
     int mid = atoi(argv[1]);
-    if (mid<0 || mid>APP_MOD_LAST) {
+    if (mid<0 || mid>=APP_MOD_LAST) {
         wconsole_println("Module id [%s] out of range",argv[1]);
         return ATCMD_BADARG;
     }

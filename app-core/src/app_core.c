@@ -138,34 +138,21 @@ typedef enum
 static void registerActions();
 static void executeDL(struct appctx *ctx, APP_CORE_DL_t *data);
 
+// Module id is NOT the index in the table, so gotta find it
+static int findModuleById(APP_MOD_ID_t mid) {
+    for(int i=0;i<_ctx.nMods;i++) {
+        if (_ctx.mods[i].id == mid) {
+            return i;
+        }
+    }
+    // not found
+    return -1;
+}
 static void enterStockMode(struct appctx *ctx) {
     // To enter stock mode, we reboot with a specific reboot reason, and the rebootmgr will
     // do the enter. This ensures that if the MCU internal watchdog timer is running, it will
     // be disabled (example: STM32 IWDG timer cannot be stopped once started, and runs even in STOP/STANDBY modes)
     RMMgr_reboot(RM_ENTER_STOCK_MODE);      
-
-#ifdef NOTUSED    
-    // Push all modules into deepsleep, active or not
-    for (int i = 0; i < ctx->nMods; i++)
-    {
-        if (ctx->mods[i].api->offCB != NULL)
-        {
-            (*(ctx->mods[i].api->offCB))();
-        }
-    }
-    // LEDs off, we are sleeping
-    ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
-    ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
-    // and stay idle in deep sleep this time
-    LPMgr_setLPMode(ctx->lpUserId, LP_OFF);
-
-    // close logging uart if active
-    log_deinit_uart();
-
-    // function that puts the device in full stop/reboot mode with the only exit possible being POR or NRST pin
-    hal_bsp_halt();
-    // not expected to return here
-#endif
 }
 // Callback from config mgr when the actived modules mask changes
 static void configChangedCB(uint16_t key)
@@ -657,7 +644,7 @@ static SM_STATE_ID_t State_Idle(void *arg, int e, void *data)
         if (data != NULL)
         {
             int mid = ((uint32_t)data) - 1000;
-            if (mid >= 0 && mid < MAX_MODS)
+            if (mid >= 0 && mid < APP_MOD_LAST)
             {
                 _ctx.requestedModule = mid;
             }
@@ -1135,9 +1122,10 @@ void AppCore_registerModule(const char * name, APP_MOD_ID_t id, APP_CORE_API_t *
 }
 
 const char* AppCore_getModuleName(APP_MOD_ID_t mid) {
-    if (mid >= 0 && mid < APP_MOD_LAST && _ctx.mods[mid].name!=NULL)
+    int midx = findModuleById(mid);
+    if (midx >= 0 && _ctx.mods[midx].name!=NULL)
     {
-        return _ctx.mods[mid].name;
+        return _ctx.mods[midx].name;
     }
     return "NA";
 }
