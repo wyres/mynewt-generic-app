@@ -242,14 +242,14 @@ static bool getData(APP_CORE_UL_t* ul) {
                 uint32_t rxAt;      // timestamp in secs since boot of when this position was updated
                 uint8_t nSats;      // number of satellites used for this fix
             */
-            uint8_t* v = app_core_msg_ul_addTLgetVP (ul, APP_CORE_UL_GPS, 21);
+            uint8_t* v = app_core_msg_ul_addTLgetVP (ul, APP_CORE_UL_GPS, 22);
             v[0] = GPS_COMM_OK;       // got a fix;
             Util_writeLE_int32_t(v, 1, _ctx.goodFix.lat);
             Util_writeLE_int32_t(v, 5, _ctx.goodFix.lon);
             Util_writeLE_int32_t(v, 9, _ctx.goodFix.alt);
             Util_writeLE_int32_t(v, 13, _ctx.goodFix.prec);
             Util_writeLE_uint32_t(v, 17, _ctx.goodFix.rxAt);
-            v[20] = _ctx.goodFix.nSats;
+            v[21] = _ctx.goodFix.nSats;
             log_info("MG: @%d UL fix %d,%d,%d p=%d from %d sats", 
                 _ctx.goodFix.rxAt, _ctx.goodFix.lat, _ctx.goodFix.lon, _ctx.goodFix.alt, _ctx.goodFix.prec, _ctx.goodFix.nSats);
             // Log this position with timestamp (can be retrieved with DL action)
