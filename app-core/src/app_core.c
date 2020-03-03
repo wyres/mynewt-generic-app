@@ -740,12 +740,12 @@ static SM_STATE_ID_t State_GettingSerialMods(void *arg, int e, void *data)
                     {
                         // start timeout for current mod to get their data
                         sm_timer_start(ctx->mySMId, timeReqd);
-                        log_debug("AC:Smod [%s] for %d ms", AppCore_getModuleName(i), timeReqd);
+                        log_debug("AC:Smod [%s] for %d ms", ctx->mods[i].name, timeReqd);
                         return SM_STATE_CURRENT;
                     }
                     else
                     {
-                        log_debug("AC:Smod [%s] says not this cycle", AppCore_getModuleName(i));
+                        log_debug("AC:Smod [%s] says not this cycle", ctx->mods[i].name);
                     }
                 }
             }
