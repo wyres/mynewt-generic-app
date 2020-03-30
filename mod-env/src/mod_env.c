@@ -39,7 +39,6 @@ static struct appctx {
     uint32_t lastEnvForceDate;
 } _ctx; // all 0 bybss def
 
-static void buttonChangeCB(void* ctx, SR_BUTTON_STATE_t currentState, SR_BUTTON_PRESS_TYPE_t currentPressType);
 static void A_getdebug(uint8_t* v, uint8_t l);
 
 // My api functions
@@ -220,24 +219,6 @@ static bool getData(APP_CORE_UL_t* ul) {
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_NOISE, 6, v);
     }
 
-    // get button
-    if (((SRMgr_getLastButtonPressTS()/1000) >= AppCore_lastULTime())) {
-        dataChanged = true;
-        /* equivalent structure but we explicitly pack our data
-        struct {
-            uint32_t pressTS;
-            uint32_t releaseTS;
-            uint8_t currState;
-            uint8_t lastPressType;
-        } v;
-        */
-        Util_writeLE_uint32_t(v, 0, SRMgr_getLastButtonPressTS());
-        Util_writeLE_uint32_t(v, 4, SRMgr_getLastButtonReleaseTS());
-        v[8]= SRMgr_getButton();
-        v[9] = SRMgr_getLastButtonPressType();
-        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_BUTTON, 10, v);
-        SRMgr_updateButton();
-    }
     return (forceULData || dataChanged);     // return the flag that says if any changed
 }
 
@@ -278,25 +259,10 @@ void mod_env_init(void) {
     // an action
     AppCore_registerAction(APP_CORE_DL_GET_DEBUG, &A_getdebug);
 
-    // add cb for button press, no context required
-    SRMgr_registerButtonCB(buttonChangeCB, NULL);
 //    log_debug("mod-env initialised");
 }
 
 // internals
-// callback each time button changes state
-static void buttonChangeCB(void* ctx, SR_BUTTON_STATE_t currentState, SR_BUTTON_PRESS_TYPE_t currentPressType) {
-    if (currentState==SR_BUTTON_RELEASED) {
-        // note using log_noout as button shares GPIO with debug log uart...
-        log_noout("ME:button released, duration %d ms, press type:%d", 
-            (SRMgr_getLastButtonReleaseTS()-SRMgr_getLastButtonPressTS()),
-            SRMgr_getLastButtonPressType());
-        // ask for immediate UL with only us consulted
-        AppCore_forceUL(APP_MOD_ENV);
-    } else {
-        log_noout("ME:button pressed");
-    }
-}
 // Get debug data in next UL
 static void A_getdebug(uint8_t* v, uint8_t l) {
     log_info("AC:action GETDEBUG");    

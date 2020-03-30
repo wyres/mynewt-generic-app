@@ -1,4 +1,6 @@
 syscfg.defs:
-
+    BUTTON_IO:
+        description: "GPIO for button connection"
+        value: -1
 
 syscfg.vals:

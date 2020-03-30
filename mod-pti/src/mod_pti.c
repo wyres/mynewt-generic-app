@@ -25,6 +25,7 @@
 #include "app-core/app_core.h"
 #include "app-core/app_msg.h"
 
+#define USER_BUTTON  ((int8_t)MYNEWT_VAL(BUTTON_IO))
 
 // COntext data
 static struct appctx {
@@ -56,7 +57,25 @@ static void deepsleep() {
 }
 static bool getData(APP_CORE_UL_t* ul) {
     log_info("MP: UL env last button @%d", _ctx.lastRelease);
-    // TOD check movement, falls, etc
+    uint8_t v[12];
+    // get button
+    if (((SRMgr_getLastButtonPressTS(USER_BUTTON)/1000) >= AppCore_lastULTime())) {
+        /* equivalent structure but we explicitly pack our data
+        struct {
+            uint32_t pressTS;
+            uint32_t releaseTS;
+            uint8_t currState;
+            uint8_t lastPressType;
+        } v;
+        */
+        Util_writeLE_uint32_t(v, 0, SRMgr_getLastButtonPressTS(USER_BUTTON));
+        Util_writeLE_uint32_t(v, 4, SRMgr_getLastButtonReleaseTS(USER_BUTTON));
+        v[8]= SRMgr_getButton(USER_BUTTON);
+        v[9] = SRMgr_getLastButtonPressType(USER_BUTTON);
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_BUTTON, 10, v);
+        SRMgr_updateButton(USER_BUTTON);
+        return true;
+    }
     return false;       // nothing vital here
 }
 
@@ -74,7 +93,7 @@ void mod_pti_init(void) {
     AppCore_registerModule("PTI", APP_MOD_PTI, &_api, EXEC_PARALLEL);
 
     // add cb for button press, no context required
-    SRMgr_registerButtonCB(buttonChangeCB, NULL);
+    SRMgr_registerButtonCB(USER_BUTTON, buttonChangeCB, NULL);
 //    log_debug("MP:initialised");
 }
 
@@ -83,10 +102,7 @@ void mod_pti_init(void) {
 static void buttonChangeCB(void* ctx, SR_BUTTON_STATE_t currentState, SR_BUTTON_PRESS_TYPE_t currentPressType) {
     if (currentState==SR_BUTTON_RELEASED) {
         // note using log_noout as button shares GPIO with debug log uart...
-        log_noout("MP:button released, duration %d ms, press type:%d", 
-            (SRMgr_getLastButtonReleaseTS()-SRMgr_getLastButtonPressTS()),
-            SRMgr_getLastButtonPressType());
-        _ctx.lastRelease = SRMgr_getLastButtonReleaseTS();
+        log_noout("MP:button released");
         // ask for immediate UL with only us consulted
         AppCore_forceUL(APP_MOD_PTI);
     } else {
