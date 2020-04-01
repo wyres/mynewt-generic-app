@@ -1059,7 +1059,7 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char *fwdate, const
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_ADREN, &_ctx.loraCfg.useAdr, sizeof(bool));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_LORA_ACKEN, &_ctx.loraCfg.useAck, sizeof(bool));
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_LORA_SF, &_ctx.loraCfg.loraSF, LORAWAN_SF7, LORAWAN_SF_DEFAULT);
-    CFMgr_getOrAddElementCheckRangeINT8(CFG_UTIL_KEY_LORA_TXPOWER, &_ctx.loraCfg.txPower, -30, 22);
+    CFMgr_getOrAddElementCheckRangeINT8(CFG_UTIL_KEY_LORA_TXPOWER, &_ctx.loraCfg.txPower, 0, 22);
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_LORA_TXPORT, &_ctx.loraCfg.txPort, 1, 255);
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_LORA_RXPORT, &_ctx.loraCfg.rxPort, 1, 255);
     if (_ctx.deviceConfigOk) {
