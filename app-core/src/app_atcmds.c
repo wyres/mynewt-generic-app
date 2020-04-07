@@ -303,7 +303,13 @@ static ATRESULT atcmd_info(uint8_t nargs, char* argv[]) {
     wconsole_println("FW:%s [%08x], v%d/%d.%d @%s ", fwinfo->fwname, Util_hashstrn(fwinfo->fwname, MAXFWNAME), 
         fwinfo->fwmaj, fwinfo->fwmin, fwinfo->fwbuild, fwinfo->fwdate);
     int hwrev = BSP_getHwVer();
-    wconsole_println("HW:rev%c",hwrev==1?'B':(hwrev==2?'C':(hwrev==3?'D':'?')));
+    if (hwrev==0) {
+        wconsole_println("HW:vProto");
+    } else if (hwrev<9) {
+        wconsole_println("HW:v2rev%c",hwrev==1?'B':(hwrev==2?'C':(hwrev==3?'D':'?')));
+    } else {
+        wconsole_println("HW:v3rev%c",hwrev==10?'A':(hwrev==11?'B':(hwrev==12?'C':'?')));
+    }
     wconsole_println("Lora:Region %d Joined:%s", fwinfo->loraregion, lora_api_isJoined()?"YES":"NO");
     wconsole_println("Batt:%d", SRMgr_getBatterymV());
     wconsole_println("Light:%d", SRMgr_getLight());
