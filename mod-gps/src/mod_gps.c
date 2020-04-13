@@ -136,6 +136,10 @@ static void gps_cb(GPS_EVENT_TYPE_t e) {
 
 // My api functions
 static uint32_t start() {
+    // When device is inactive this module is not used
+    if (!AppCore_isDeviceActive()) {
+        return 0;
+    }
     _ctx.commFail = false;
     uint32_t coldStartTime=2*60;
     uint32_t warmStartTime=60;
@@ -228,6 +232,11 @@ static void deepsleep() {
     // nothing to do
 }
 static bool getData(APP_CORE_UL_t* ul) {
+        // When device is inactive this module is not used
+    if (!AppCore_isDeviceActive()) {
+        return false;
+    }
+
     // If we tried to get a fix, or if we are in 'on stop' mode, then inform backend of the fix or lack thereof
     if (_ctx.doFix || _ctx.fixMode==FIX_ON_STOP) {
         // Did we get a fix this time? (or do we have one from before)

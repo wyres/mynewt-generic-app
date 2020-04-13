@@ -69,6 +69,10 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
 
 // My api functions
 static uint32_t start() {
+    // When device is inactive this module is not used
+    if (!AppCore_isDeviceActive()) {
+        return 0;
+    }
     // Get max BLEs, validate value is ok to avoid issues...
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_MAX_NAV_PER_UL, &_ctx.maxNavPerUL, 1, MAX_BLE_TOSEND);
 
@@ -101,6 +105,10 @@ static void deepsleep() {
 }
 
 static bool getData(APP_CORE_UL_t* ul) {
+    // When device is inactive this module is not used
+    if (!AppCore_isDeviceActive()) {
+        return false;
+    }
     // we have knowledge of 2 types of ibeacons
     // - 'fixed navigation' type (sparsely deployed, we shouldn't see many, only send up best rssi ones)
     // - 'mobile tag' type : may congregate in areas so we see a lot of them. In this case, we do in/out notifications

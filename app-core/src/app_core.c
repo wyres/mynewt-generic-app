@@ -44,6 +44,8 @@ static struct appctx
 {
     SM_ID_t mySMId;
     bool deviceConfigOk;
+    uint8_t deviceActive;          // is this device inactive? (1=ACTIVE, 0=INACTIVE)
+    uint8_t enableStateLeds;   // flash LEDs regularly (at each tic) to show active/inactive states? 0=NO, 1=YES
     uint8_t lpUserId;
     uint8_t nMods;
     struct
@@ -62,6 +64,7 @@ static struct appctx
     uint32_t lastULTime; // timestamp of last uplink in seconds since boot
     uint32_t idleTimeMovingSecs;
     uint32_t idleTimeNotMovingMins;
+    uint32_t idleTimeInactiveMins;
     uint32_t idleTimeCheckSecs;
     uint32_t modSetupTimeSecs;
     uint32_t idleStartTS; // In seconds since epoch
@@ -82,7 +85,6 @@ static struct appctx
         bool useAck;
         bool useAdr;
         uint8_t txPort;
-        uint8_t rxPort;
         uint8_t loraSF;
         int8_t txPower;
         uint32_t txTimeoutMs;
@@ -93,15 +95,18 @@ static struct appctx
     APP_CORE_FW_t fw;
 } _ctx = {
     .doReboot = false,
+    .deviceActive = 1,
+    .enableStateLeds = MYNEWT_VAL(ENABLE_ACTIVE_LEDS),     //0,
     .nMods = 0,
     .nActions = 0,
     .requestedModule = -1,
-    .idleTimeMovingSecs = 5 * 60, // 5mins
-    .idleTimeNotMovingMins = 120, // 2 hours
-    .idleTimeCheckSecs = 60,
+    .idleTimeMovingSecs = MYNEWT_VAL(IDLETIME_MOVING_SECS),     //5 * 60, // 5mins
+    .idleTimeNotMovingMins = MYNEWT_VAL(IDLETIME_NOTMOVING_MINS),     //120, // 2 hours
+    .idleTimeInactiveMins = MYNEWT_VAL(IDLETIME_INACTIVE_MINS),     //120, // 2 hours
+    .idleTimeCheckSecs = MYNEWT_VAL(IDLETIME_CHECK_SECS),     // 60,
     .joinTimeCheckSecs = 60, // timeout on join attempt
-    .rejoinWaitMins = 120,   // 2 hours for rejoin tries between the try blocks
-    .rejoinWaitSecs = 60,    // 60s default for rejoin tries in the 'try X times' (ok for SF10 duty cycle?)
+    .rejoinWaitMins = MYNEWT_VAL(JOIN_RETRY_LONG_MINS),     //120,   // 2 hours for rejoin tries between the try blocks
+    .rejoinWaitSecs = MYNEWT_VAL(JOIN_RETRY_SHORT_SECS),     //60,    // 60s default for rejoin tries in the 'try X times' (ok for SF10 duty cycle?)
     .nbJoinAttempts = 0,
     .notStockMode = 0, // in stock mode by default until a rejoin works
     .modSetupTimeSecs = 3,
@@ -111,9 +116,8 @@ static struct appctx
     .loraCfg = {
         .useAck = false,
         .useAdr = MYNEWT_VAL(LORA_DEFAULT_ADR), // Allow default to be a build option
-        .txPort = 3,
-        .rxPort = 3,
-        .loraSF = LORAWAN_SF10,
+        .txPort = MYNEWT_VAL(LORA_TX_PORT),     //3,
+        .loraSF = MYNEWT_VAL(LORA_DEFAULT_SF),     //LORAWAN_SF10,
         .txPower = 14,
         .txTimeoutMs = 10000,
         .appeui = {0x38, 0xB8, 0xEB, 0xE0, 0x00, 0x00, 0x00, 0x00},
@@ -153,6 +157,20 @@ static void enterStockMode(struct appctx *ctx) {
     // do the enter. This ensures that if the MCU internal watchdog timer is running, it will
     // be disabled (example: STM32 IWDG timer cannot be stopped once started, and runs even in STOP/STANDBY modes)
     RMMgr_reboot(RM_ENTER_STOCK_MODE);      
+}
+//helper to indicate device state in idle phase if required
+static void deviceStateIndicate() {
+    // application may decide to have flashing leds during idle (your funeral for the battery life...)
+    // Notice we don't cancel or interupt any leds currently active that a module may have set running..
+    if (_ctx.enableStateLeds) {
+        if (AppCore_isDeviceActive()) {
+            // Signal we are active during idle
+            ledRequest(MYNEWT_VAL(MODS_ACTIVE_LED), FLASH_MIN, _ctx.idleTimeCheckSecs, LED_REQ_ENQUEUE);
+        } else {
+            // Signal we are inactive during idle
+            ledRequest(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_MIN, _ctx.idleTimeCheckSecs, LED_REQ_ENQUEUE);
+        }
+    }
 }
 // Callback from config mgr when the actived modules mask changes
 static void configChangedCB(uint16_t key)
@@ -578,12 +596,12 @@ static SM_STATE_ID_t State_Idle(void *arg, int e, void *data)
                 (*(ctx->mods[i].api->deepsleepCB))();
             }
         }
-        // LEDs off, we are deeply sleeping
-        ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
-        ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
-        // and stay idle in deep sleep this time
-        // Note this means that no DL rx should be possible in IDLE state - must wait elsewhere if you expect DL...
+        // and stay idle in deep sleep if possible (other code may also have an option)
         LPMgr_setLPMode(ctx->lpUserId, LP_DEEPSLEEP);
+        // if enabled signal the device state (active or inactive) via LED flash pattern (enqueued) 
+        // Note we don't cancel leds; to allow any modules to have set a time limited leds sequence without it getting cancelled immediatly...
+        deviceStateIndicate();
+        
         return SM_STATE_CURRENT;
     }
     case SM_EXIT:
@@ -611,15 +629,20 @@ static SM_STATE_ID_t State_Idle(void *arg, int e, void *data)
             }
         }
 
-        // calculate timeout -> did we move? deal with difference between moving and not moving times
-        MMMgr_check(); // check hardware
-        uint32_t idletimeS = ctx->idleTimeNotMovingMins * 60;
-        // check if has moved recently and use different timeout
-        if (MMMgr_hasMovedSince(ctx->lastULTime)) {
-            idletimeS = ctx->idleTimeMovingSecs;
-            log_debug("AC:move (%d ago) since UL , it %d", (TMMgr_getRelTimeSecs() - MMMgr_getLastMovedTime()), idletimeS);
-        } else {
-            log_debug("AC:no move (%d ago) since UL , it %d", (TMMgr_getRelTimeSecs() - MMMgr_getLastMovedTime()), idletimeS);
+        // calculate timeout 
+        // if device not active, use specific timeout as default
+        uint32_t idletimeS = ctx->idleTimeInactiveMins * 60;
+        if (AppCore_isDeviceActive()) {
+            // device is active -> check did we move? deal with difference between moving and not moving times
+            MMMgr_check(); // check hardware
+            idletimeS = ctx->idleTimeNotMovingMins * 60;
+            // check if has moved recently and use different timeout
+            if (MMMgr_hasMovedSince(ctx->lastULTime)) {
+                idletimeS = ctx->idleTimeMovingSecs;
+                log_debug("AC:move (%d ago) since UL , it %d", (TMMgr_getRelTimeSecs() - MMMgr_getLastMovedTime()), idletimeS);
+            } else {
+                log_debug("AC:no move (%d ago) since UL , it %d", (TMMgr_getRelTimeSecs() - MMMgr_getLastMovedTime()), idletimeS);
+            }
         }
         idletimeS -= 1; // adjust by 1s to get run if 'close' to timeout
         uint32_t dt = TMMgr_getRelTimeSecs() - ctx->idleStartTS;
@@ -632,7 +655,8 @@ static SM_STATE_ID_t State_Idle(void *arg, int e, void *data)
         log_debug("AC:reidle %ds as %d < %d", ctx->idleTimeCheckSecs, dt, idletimeS);
         //            log_check_uart_active();        // so closes it if no logs being sent - not yet tested removed
         LPMgr_setLPMode(ctx->lpUserId, LP_DEEPSLEEP);
-
+        // if enabled signal the device state (active or inactive)
+        deviceStateIndicate();
         return SM_STATE_CURRENT;
     }
 
@@ -657,6 +681,8 @@ static SM_STATE_ID_t State_Idle(void *arg, int e, void *data)
         if (data != NULL)
         {
             executeDL(ctx, (APP_CORE_DL_t *)data);
+            // if enabled signal the device state (active or inactive) in case it changed, or in case the action changed the leds
+            deviceStateIndicate();
         }
         return SM_STATE_CURRENT;
     }
@@ -1027,6 +1053,7 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char *fwdate, const
     // Get the app core config, ensuring values are 'reasonable'
     CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS, &_ctx.idleTimeMovingSecs, 0, 24 * 60 * 60);
     CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_MINS, &_ctx.idleTimeNotMovingMins, 0, 24 * 60);
+    CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_IDLE_TIME_INACTIVE_MINS, &_ctx.idleTimeInactiveMins, 5, 24*60);
     CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_IDLE_TIME_CHECK_SECS, &_ctx.idleTimeCheckSecs, 15, 5 * 60);
     CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_JOIN_TIMEOUT_SECS, &_ctx.joinTimeCheckSecs, 18, 30);
     CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_RETRY_JOIN_TIME_MINS, &_ctx.rejoinWaitMins, 1, 24 * 60);
@@ -1036,6 +1063,8 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char *fwdate, const
     CFMgr_getOrAddElementCheckRangeUINT32(CFG_UTIL_KEY_MAXTIME_UL_MINS, &_ctx.maxTimeBetweenULMins, 1, 24 * 60);
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_DL_ID, &_ctx.lastDLId, 0, 15);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_STOCK_MODE, &_ctx.notStockMode, sizeof(uint8_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_DEVICE_ACTIVE, &_ctx.deviceActive, sizeof(uint8_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_ENABLE_DEVICE_STATE_LEDS, &_ctx.enableStateLeds, sizeof(uint8_t));
     CFMgr_registerCB(configChangedCB); // For changes to our config
 
     registerActions();
@@ -1061,7 +1090,6 @@ void app_core_start(int fwmaj, int fwmin, int fwbuild, const char *fwdate, const
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_LORA_SF, &_ctx.loraCfg.loraSF, LORAWAN_SF7, LORAWAN_SF_DEFAULT);
     CFMgr_getOrAddElementCheckRangeINT8(CFG_UTIL_KEY_LORA_TXPOWER, &_ctx.loraCfg.txPower, 0, 22);
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_LORA_TXPORT, &_ctx.loraCfg.txPort, 1, 255);
-    CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_LORA_RXPORT, &_ctx.loraCfg.rxPort, 1, 255);
     if (_ctx.deviceConfigOk) {
         // Note the api wants the ids in init -> this means if user changes in AT then they need to reboot...
         lora_api_init(&_ctx.loraCfg.deveui[0], &_ctx.loraCfg.appeui[0], &_ctx.loraCfg.appkey[0], _ctx.loraCfg.useAdr, _ctx.loraCfg.loraSF, _ctx.loraCfg.txPower);
@@ -1103,6 +1131,29 @@ APP_CORE_FW_t *AppCore_getFwInfo()
 }
 
 // core api for modules
+// Allow other code (modules) to change the active state of the device (eg via user input using buttons or shaking)
+void AppCore_setDeviceState(bool active) {
+    _ctx.deviceActive = (active?1:0);
+    CFMgr_setElement(CFG_UTIL_KEY_DEVICE_ACTIVE, &_ctx.deviceActive, sizeof(uint8_t));
+    if (_ctx.enableStateLeds) {
+        if (active) {
+            // Signal briefly we are active now
+            ledStart(MYNEWT_VAL(MODS_ACTIVE_LED), FLASH_05HZ, 2);
+        } else {
+            // Signal briefly we are inactive now
+            ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_05HZ, 2);
+        }
+    }
+}
+// Is the device in active (data collection) or inactive (no data collection) mode?
+bool AppCore_isDeviceActive() {
+    return (_ctx.deviceActive==1);
+}
+// Enable or disable leds feedback about active/inactive state
+void AppCore_setStateLeds(bool enabled) {
+    _ctx.enableStateLeds = (enabled?1:0);
+    CFMgr_setElement(CFG_UTIL_KEY_ENABLE_DEVICE_STATE_LEDS, &_ctx.enableStateLeds, sizeof(uint8_t));
+}
 // mcbs pointer must be to a static structure
 void AppCore_registerModule(const char * name, APP_MOD_ID_t id, APP_CORE_API_t *mcbs, APP_MOD_EXEC_t execType)
 {

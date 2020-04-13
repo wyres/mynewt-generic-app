@@ -282,6 +282,10 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
 
 // My api functions
 static uint32_t start() {
+    // When device is inactive this module is not used
+    if (!AppCore_isDeviceActive()) {
+        return 0;
+    }
     // Read config each start() to take into account any changes
     // exit timeout should actually be in function of the delay between scans...
     CFMgr_getOrAddElementCheckRangeUINT8(CFG_UTIL_KEY_BLE_EXIT_TIMEOUT_MINS, &_ctx.exitTimeoutMins, 1, 4*60);
@@ -318,6 +322,11 @@ static void deepsleep() {
 }
 
 static bool getData(APP_CORE_UL_t* ul) {
+        // When device is inactive this module is not used
+    if (!AppCore_isDeviceActive()) {
+        return false;
+    }
+
     // we have knowledge of 2 types of ibeacons
     // - short range 'fixed navigation' type (sparsely deployed, we shouldn't see many, only send up best rssi ones)
     //      - major=0x00xx

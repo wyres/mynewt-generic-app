@@ -70,6 +70,12 @@ uint32_t AppCore_getTimeToNextUL();
 bool AppCore_forceUL(int reqModule);
 // Tell core we're done processing
 void AppCore_module_done(APP_MOD_ID_t id);
+// Tell core if the device should be in the 'active' mode (default) or the inactive mode (no data collection, specific inter-UL time)
+void AppCore_setDeviceState(bool active);
+// get the current state
+bool AppCore_isDeviceActive();
+// Enable or not use of led feedback about the active/inactive state of the device
+void AppCore_setStateLeds(bool enabled);
 // Register a DL action handler
 void AppCore_registerAction(uint8_t id, ACTIONFN_t cb);
 // Find an action handler or NULL
@@ -86,7 +92,9 @@ typedef enum { APP_CORE_UL_VERSION=0, APP_CORE_UL_UPTIME=1, APP_CORE_UL_CONFIG=2
     APP_CORE_UL_ENV_REBOOT=16, APP_CORE_UL_ENV_LASTASSERT=17,
     APP_CORE_UL_BLE_CURR=18, APP_CORE_UL_BLE_ENTER=19, APP_CORE_UL_BLE_EXIT=20, APP_CORE_UL_BLE_COUNT=21,
     APP_CORE_UL_GPS=22, 
-    APP_CORE_UL_BLE_ERRORMASK=23, APP_CORE_UL_ENV_LASTLOGCALLER=24, APP_CORE_UL_BLE_PRESENCE=25
+    APP_CORE_UL_BLE_ERRORMASK=23, APP_CORE_UL_ENV_LASTLOGCALLER=24, APP_CORE_UL_BLE_PRESENCE=25,
+    // Add new generic tags in here...
+    APP_CORE_UL_APP_ACK_REQ=240, APP_CORE_UL_APP_SPECIFIC_START=241,  // from this point on, not interpreted by generic backends
 } APP_CORE_UL_TAGS;
 // app core TLV tags for DL : 1 byte sized, never change already allocated values! Note some are historic values see WyresDeviceActions.java
 // App core has handlers for up to GET_MODS
@@ -95,7 +103,7 @@ typedef enum { APP_CORE_UL_VERSION=0, APP_CORE_UL_UPTIME=1, APP_CORE_UL_CONFIG=2
 typedef enum { APP_CORE_DL_REBOOT=1, APP_CORE_DL_SET_CONFIG=2, APP_CORE_DL_GET_CONFIG=3, 
     APP_CORE_DL_FLASH_LED1=5, APP_CORE_DL_FLASH_LED2=6,        
     APP_CORE_DL_SET_UTCTIME=24, APP_CORE_DL_FOTA=25, APP_CORE_DL_GET_MODS=26, APP_CORE_DL_FIX_GPS=11,
-    APP_CORE_DL_GET_DEBUG=27
+    APP_CORE_DL_GET_DEBUG=27, APP_CORE_DL_APP_ACK=28,
 } APP_CORE_DL_TAGS;
 
 
@@ -110,10 +118,13 @@ typedef enum { APP_CORE_DL_REBOOT=1, APP_CORE_DL_SET_CONFIG=2, APP_CORE_DL_GET_C
 #define CFG_UTIL_KEY_STOCK_MODE                 CFGKEY(CFG_MODULE_APP_CORE, 8)
 #define CFG_UTIL_KEY_JOIN_TIMEOUT_SECS          CFGKEY(CFG_MODULE_APP_CORE, 9)
 #define CFG_UTIL_KEY_RETRY_JOIN_TIME_MINS       CFGKEY(CFG_MODULE_APP_CORE, 10)
-#define CFG_UTIL_KEY_FIRMWARE_INFO             CFGKEY(CFG_MODULE_APP_CORE, 11)
-#define CFG_UTIL_KEY_HW_BASE_REV             CFGKEY(CFG_MODULE_APP_CORE, 12)
+#define CFG_UTIL_KEY_FIRMWARE_INFO              CFGKEY(CFG_MODULE_APP_CORE, 11)
+#define CFG_UTIL_KEY_HW_BASE_REV                CFGKEY(CFG_MODULE_APP_CORE, 12)
 #define CFG_UTIL_KEY_RETRY_JOIN_TIME_SECS       CFGKEY(CFG_MODULE_APP_CORE, 13)
-#define CFG_UTIL_KEY_MAX_RAPID_JOIN_ATTEMPTS       CFGKEY(CFG_MODULE_APP_CORE, 14)
+#define CFG_UTIL_KEY_MAX_RAPID_JOIN_ATTEMPTS    CFGKEY(CFG_MODULE_APP_CORE, 14)
+#define CFG_UTIL_KEY_DEVICE_ACTIVE              CFGKEY(CFG_MODULE_APP_CORE, 15)
+#define CFG_UTIL_KEY_IDLE_TIME_INACTIVE_MINS    CFGKEY(CFG_MODULE_APP_CORE, 16)
+#define CFG_UTIL_KEY_ENABLE_DEVICE_STATE_LEDS    CFGKEY(CFG_MODULE_APP_CORE, 17)
 
 // LOra config is in app level for app-core
 #define CFG_UTIL_KEY_LORA_DEVEUI CFGKEY(CFG_MODULE_LORA, 1)
