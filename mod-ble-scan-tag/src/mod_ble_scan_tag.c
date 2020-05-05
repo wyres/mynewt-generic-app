@@ -265,7 +265,7 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
         case WBLE_COMM_OK: {
             log_debug("MBT: comm ok");
             // Scan for both countable and enter/exit types. Note calculation of major range depends on the BLE_TYPExXX values being contigous...
-            wble_scan_start(_ctx.wbleCtx, _ctx.uuid, (BLE_TYPE_COUNTABLE_START<<8), (BLE_TYPE_PRESENCE<<8) + 0xFF, MAX_BLE_TRACKED, &_ctx.iblist[0]);
+            wble_scan_start(_ctx.wbleCtx, _ctx.uuid, (BLE_TYPE_COUNTABLE_START<<8), (BLE_TYPE_PROXIMITY<<8) + 0xFF, MAX_BLE_TRACKED, &_ctx.iblist[0]);
             break;
         }
         case WBLE_SCAN_RX_IB: {
@@ -363,7 +363,8 @@ static bool getData(APP_CORE_UL_t* ul) {
                 _ctx.bleErrorMask |= EM_BLE_RX_BADMAJ;
                 // Free up his space
                 _ctx.iblist[i].lastSeenAt=0;
-            } else if (bletype==BLE_TYPE_ENTEREXIT) {
+            } else if (bletype==BLE_TYPE_ENTEREXIT || bletype==BLE_TYPE_PROXIMITY) {
+                // Note we treat covid proximity tracker beacons as enter/exit types too
                 // exit/enter type : if new, we want to put in enter list in the outgoing message
                 if (_ctx.iblist[i].new) {
                     nbEnter++;

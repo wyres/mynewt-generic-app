@@ -1,0 +1,12 @@
+syscfg.defs:
+    MOD_BLE_MAXIBS_TAG_INZONE:
+        description: "max number of ibeacons that can be tracked for proximity and be active simultaneuously"
+        value: 100
+    MOD_BLE_PROX_SIGNIF_CONTACT:
+        description: "time in minutes after which we consider the continuing contact to be worth reporting"
+        value: 10
+    MOD_BLE_PROX_SIGNIF_RSSI:
+        description: "mnimum RSSI above which we consider the continuing contact to be worth reporting"
+        value: -80
+        
+syscfg.vals:
