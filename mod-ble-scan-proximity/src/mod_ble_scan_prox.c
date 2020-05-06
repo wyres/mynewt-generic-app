@@ -293,7 +293,7 @@ static APP_CORE_API_t _api = {
 void mod_ble_scan_prox_init(void) {
     // _ctx in bss -> set to 0 by default
     // Set non-0 init values (default before config read)
-    _ctx.exitTimeoutMins=5;
+    _ctx.exitTimeoutMins=4;
     _ctx.maxContactsPerUL=50;
     _ctx.nbULRepeats = 2;
     _ctx.contactSignifTimeMins = MYNEWT_VAL(MOD_BLE_PROX_SIGNIF_CONTACT);

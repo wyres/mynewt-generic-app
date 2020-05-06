@@ -45,7 +45,7 @@ static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
         case WBLE_COMM_OK: {
             log_debug("MBB: comm ok");
             // Scan selecting only majors between 0x0000 and 0x00FF ie short range
-            wble_ibeacon_start(_ctx.wbleCtx, &_ctx.UUID[0], _ctx.major, _ctx.minor, 0);
+            wble_ibeacon_start(_ctx.wbleCtx, &_ctx.UUID[0], _ctx.major, _ctx.minor, 0, _ctx.beaconPeriodMS, _ctx.txpower);
             break;
         }
         default: {
