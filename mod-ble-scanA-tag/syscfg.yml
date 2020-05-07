@@ -1,0 +1,6 @@
+syscfg.defs:
+    MOD_BLE_MAXIBS_TAG_INZONE:
+        description: "max number of ibeacons that can be tracked in a zone for enter/exit"
+        value: 100
+
+syscfg.vals:

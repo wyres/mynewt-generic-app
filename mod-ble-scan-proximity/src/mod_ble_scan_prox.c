@@ -143,6 +143,7 @@ static bool getData(APP_CORE_UL_t* ul) {
     }
 
     int nbContact=0;
+    int nbContactEnd=0;
 
     uint32_t now = TMMgr_getRelTimeSecs();
     
@@ -159,8 +160,8 @@ static bool getData(APP_CORE_UL_t* ul) {
             if (bletype==BLE_TYPE_PROXIMITY) {
                 // is he timed out (exited)? 
                 if ((now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60)) {
-                    // Yes, he's not present (and we'll 'delete' him by resetting his lastSeenAt)
-                    _ctx.iblist[i].lastSeenAt=0;
+                    // Yes, he's not present (and we'll 'delete' him by resetting his lastSeenAt once sent)
+                    nbContactEnd++;     // processing is done once he's been in UL
                 } else {
                     // Been seen for long enough to count as a contact (and not yet sent?)
                     if (_ctx.iblist[i].new && ((now-_ctx.iblist[i].firstSeenAt) > (_ctx.contactSignifTimeMins*60))) {
@@ -179,6 +180,9 @@ static bool getData(APP_CORE_UL_t* ul) {
     // Limit numbers in the UL to configured maxes
     if (nbContact>_ctx.maxContactsPerUL) {
         nbContact = _ctx.maxContactsPerUL;
+    }
+    if (nbContactEnd>_ctx.maxContactsPerUL) {
+        nbContactEnd = _ctx.maxContactsPerUL;
     }
 
     // put up to max enter elemnents into UL.
@@ -220,9 +224,10 @@ static bool getData(APP_CORE_UL_t* ul) {
                     *vp++ = _ctx.iblist[i].rssi;
                     *vp++ = _ctx.iblist[i].extra;
                     // we want to tell backend at least twice per contact
-                    _ctx.iblist[i].newULCnt++;  
-                    if (_ctx.iblist[i].newULCnt > _ctx.nbULRepeats) {
+                    _ctx.iblist[i].inULCnt++;  
+                    if (_ctx.iblist[i].inULCnt > _ctx.nbULRepeats) {
                         _ctx.iblist[i].new = false;     // we've told the backend several times!
+                        _ctx.iblist[i].inULCnt = 0;     // ready for reuse
                     }
                     nbAdded++;
                     nbThisUL--;
@@ -239,7 +244,62 @@ static bool getData(APP_CORE_UL_t* ul) {
             }
         }
     }
+    if (nbContactEnd>0) {
+        int nbAdded = 0;
+        uint8_t* vp = NULL;
+        int nbThisUL = 0;
+        for(int i=0;i<MAX_BLE_TRACKED && nbAdded<nbContactEnd; i++) {
+            // If a valid entry, and of proximity ble type, and has timed out...
+            if ((_ctx.iblist[i].lastSeenAt>0) 
+                    && (((_ctx.iblist[i].major & 0xFF00) >> 8) == BLE_TYPE_PROXIMITY) 
+                    && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60)) {
+                if (nbThisUL <= 0) {
+                    // Find space in UL
+                    int bytesInUL = app_core_msg_ul_remainingSz(ul);
+                    // Check if space for TL and 1 ble at least
+                    if (bytesInUL < (TL_HDR_UL_SZ + EXIT_UL_SZ)) {
+                        // move to next message and get size (0=no next!)
+                        if ((bytesInUL = app_core_msg_ul_requestNextUL(ul)) <= 0) {
+                            // no more messages, sorry
+                            log_debug("MBN: unexpected no next UL still got %d",(nbContactEnd-nbAdded));
+                            _ctx.bleErrorMask |= EM_UL_NONEXTUL;
+                            break;      // from for, we're done here
+                        }
+                    }
+                    nbThisUL = (bytesInUL-TL_HDR_UL_SZ) / EXIT_UL_SZ; 
+                    if (nbThisUL > (nbContactEnd-nbAdded)) {
+                        // should always give a >0 answer as nbAdded is never >= nbExitToAdd here
+                        nbThisUL = (nbContactEnd-nbAdded);
+                        assert(nbThisUL>0);
+                    }
+                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_EXIT, nbThisUL*EXIT_UL_SZ);
+                }
+                if (vp!=NULL) {
+                    // add maj/min to UL : must be number of bytes equal to EXIT_UL_SZ
+                    *vp++ = (_ctx.iblist[i].major & 0xFF);        // Just LSB of major
+                    *vp++ = (_ctx.iblist[i].minor & 0xff);
+                    *vp++ = ((_ctx.iblist[i].minor >> 8) & 0xff);
+                    _ctx.iblist[i].inULCnt++;  
+                    if (_ctx.iblist[i].inULCnt > _ctx.nbULRepeats) {
+                        // delete from active list
+                        _ctx.iblist[i].lastSeenAt=0;
+                        _ctx.iblist[i].inULCnt=0;       // reset for next time
+                    }
+                    nbAdded++;
+                    nbThisUL--;
+                    if (nbAdded>=nbContactEnd) {
+                        break;      // added all that we're allowed
+                    }
 
+                } else {
+                    // this should not happen if the previous calculations were correct...
+                    log_debug("MBN: unexpected no space in UL for %d",nbThisUL);
+                    _ctx.bleErrorMask |= EM_UL_NOSPACE;
+                    break;
+                }
+            }
+        }
+    }
 
 /*    if (nbSent>0) {
         // Build CBOR array block first then add to message (as we don't know its size)
