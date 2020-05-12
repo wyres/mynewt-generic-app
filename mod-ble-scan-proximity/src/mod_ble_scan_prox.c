@@ -25,10 +25,9 @@
 #include "app-core/app_msg.h"
 #include "mod-ble/mod_ble.h"
 
-#define ENTER_UL_SZ (5)
-#define EXIT_UL_SZ (3)
+#define PROX_ENTER_UL_SZ (8)
+#define PROX_EXIT_UL_SZ (7)
 #define COUNT_UL_SZ (2)
-#define PRESENCE_HDR_UL_SZ (2)
 #define TL_HDR_UL_SZ (2)
 
 // Max ibeacons we track in the scan history. We give ourselves some space over the defined limit to deal with the 'exit' timeouts.
@@ -142,8 +141,9 @@ static bool getData(APP_CORE_UL_t* ul) {
         return false;
     }
 
-    int nbContact=0;
-    int nbContactEnd=0;
+    int nbContactCurrent=0;     // how many 'proximity' type guys currently near me
+    int nbContactNew=0;         // How many are 'new' contacts (ie > X mins of being there)
+    int nbContactEnd=0;         // how many that were there are no longer there?
 
     uint32_t now = TMMgr_getRelTimeSecs();
     
@@ -158,15 +158,23 @@ static bool getData(APP_CORE_UL_t* ul) {
         if (_ctx.iblist[i].lastSeenAt>0) {      // its a valid entry
             uint8_t bletype = (_ctx.iblist[i].major & 0xff00) >> 8;
             if (bletype==BLE_TYPE_PROXIMITY) {
-                // is he timed out (exited)? 
-                if ((now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60)) {
-                    // Yes, he's not present (and we'll 'delete' him by resetting his lastSeenAt once sent)
-                    nbContactEnd++;     // processing is done once he's been in UL
-                } else {
+                nbContactCurrent++;     // count how many are around me
+                if (_ctx.iblist[i].new && ((now-_ctx.iblist[i].firstSeenAt) > (_ctx.contactSignifTimeMins*60))) {
                     // Been seen for long enough to count as a contact (and not yet sent?)
-                    if (_ctx.iblist[i].new && ((now-_ctx.iblist[i].firstSeenAt) > (_ctx.contactSignifTimeMins*60))) {
-                        nbContact++;
+                    nbContactNew++;
+                } else if ((now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60)) {
+                    // is he timed out (exited)? [note only check once his 'newness' has been sent to backend]
+                    // was he a proper 'contact' ie was present for the minimum time? (and hence notified)
+                    if ((now-_ctx.iblist[i].firstSeenAt) > (_ctx.contactSignifTimeMins*60)) {
+                        // Yes, and now he's not present (and we'll 'delete' him by resetting his lastSeenAt once sent up)
+                        nbContactEnd++;     // processing is done once he's been in UL
+                    } else {
+                        // no, and now he's gone, so can just remove him from the list (don't tell about 'exit' of non-contacts)
+                        _ctx.iblist[i].lastSeenAt = 0;
                     }
+                } else {
+                    // If the RSSI is 'too low' then delete from list
+                    // TODO : do we mean any individual rx is too low, or the mean rssi is too low, or all the rx rssis are too low??
                 }
             } else {
                 // ignore, shouldn't happen as the scanner was told to ignore these guys
@@ -177,20 +185,33 @@ static bool getData(APP_CORE_UL_t* ul) {
             }
         }
     }
-    // Limit numbers in the UL to configured maxes
-    if (nbContact>_ctx.maxContactsPerUL) {
-        nbContact = _ctx.maxContactsPerUL;
+
+        // tell backend just how many people are around me right now
+    uint8_t ctb[2];
+    ctb[0] = (BLE_TYPE_PROXIMITY);
+    ctb[1] = nbContactCurrent;
+    if (app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_COUNT, 2, &ctb[0])) {
+        log_debug("MBP: proximity tags %d", nbContactCurrent);
+    } else {
+        // this should not happen if the previous calculations were correct...
+        log_debug("MBP: no space in UL for prox count %d",nbContactCurrent);
+        _ctx.bleErrorMask |= EM_UL_NOSPACE;
+    }
+
+    // Limit numbers in the UL to configured maxes for the lists
+    if (nbContactNew>_ctx.maxContactsPerUL) {
+        nbContactNew = _ctx.maxContactsPerUL;
     }
     if (nbContactEnd>_ctx.maxContactsPerUL) {
         nbContactEnd = _ctx.maxContactsPerUL;
     }
 
     // put up to max enter elemnents into UL.
-    if (nbContact>0) {
+    if (nbContactNew>0) {
         int nbAdded = 0;
         uint8_t* vp = NULL;
         int nbThisUL = 0;
-        for(int i=0;i<MAX_BLE_TRACKED && nbAdded<nbContact; i++) {
+        for(int i=0;i<MAX_BLE_TRACKED && nbAdded<nbContactNew; i++) {
             // If entry is valid, and of type enter/exit, and is new, then...
             if ((_ctx.iblist[i].lastSeenAt>0) 
                     && (((_ctx.iblist[i].major & 0xFF00) >> 8) == BLE_TYPE_PROXIMITY)
@@ -199,30 +220,38 @@ static bool getData(APP_CORE_UL_t* ul) {
                     // Find space in UL
                     int bytesInUL = app_core_msg_ul_remainingSz(ul);
                     // Check if space for TL and 1 ble at least
-                    if (bytesInUL < (TL_HDR_UL_SZ + ENTER_UL_SZ)) {
+                    if (bytesInUL < (TL_HDR_UL_SZ + PROX_ENTER_UL_SZ)) {
                         // move to next message and get size (0=no next!)
                         if ((bytesInUL = app_core_msg_ul_requestNextUL(ul)) <= 0) {
                             // no more messages, sorry
-                            log_debug("MBN: unexpected no next UL still got enter %d",(nbContact-nbAdded));
+                            log_debug("MBN: unexpected no next UL still got enter %d",(nbContactNew-nbAdded));
                             _ctx.bleErrorMask |= EM_UL_NONEXTUL;
                             break;      // from for, we're done here
                         }
                     }
-                    nbThisUL = (bytesInUL-TL_HDR_UL_SZ) / ENTER_UL_SZ; 
-                    if (nbThisUL > (nbContact-nbAdded)) {
-                        // should always give a >0 answer as nbAdded is never >= nbEnterToAdd here
-                        nbThisUL = (nbContact-nbAdded);
+                    nbThisUL = (bytesInUL-TL_HDR_UL_SZ) / PROX_ENTER_UL_SZ; 
+                    if (nbThisUL > (nbContactNew-nbAdded)) {
+                        // should always give a >0 answer as nbAdded is never >= nbContactNew here
+                        nbThisUL = (nbContactNew-nbAdded);
                         assert(nbThisUL>0);
                     }
-                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_ENTER, nbThisUL*ENTER_UL_SZ);
+                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_PROX_ENTER, nbThisUL*PROX_ENTER_UL_SZ);
                 }
                 if (vp!=NULL) {
+                    int seenSinceMins = ((now - _ctx.iblist[i].firstSeenAt) / 60);
+                    // new format with devAddr/timeSinceEntered/RSSI 
+                    memcpy(vp, &_ctx.iblist[i].devaddr[0], DEVADDR_SZ);
+                    vp+=DEVADDR_SZ;
+/*
                     // add maj/min to UL (number of bytes == ENTER_UL_SZ)
                     *vp++ = (_ctx.iblist[i].major & 0xFF);        // Just LSB of major
                     *vp++ = (_ctx.iblist[i].minor & 0xff);
                     *vp++ = ((_ctx.iblist[i].minor >> 8) & 0xff);
-                    *vp++ = _ctx.iblist[i].rssi;
                     *vp++ = _ctx.iblist[i].extra;
+*/
+                    *vp++ = _ctx.iblist[i].rssi;
+                    *vp++ = (seenSinceMins<255 ? seenSinceMins : 255);      // Total time seen in minutes, max'd at 255
+                    
                     // we want to tell backend at least twice per contact
                     _ctx.iblist[i].inULCnt++;  
                     if (_ctx.iblist[i].inULCnt > _ctx.nbULRepeats) {
@@ -231,7 +260,7 @@ static bool getData(APP_CORE_UL_t* ul) {
                     }
                     nbAdded++;
                     nbThisUL--;
-                    if (nbAdded>=nbContact) {
+                    if (nbAdded>=nbContactNew) {
                         break;      // added all that we're allowed
                     }
 
@@ -252,12 +281,12 @@ static bool getData(APP_CORE_UL_t* ul) {
             // If a valid entry, and of proximity ble type, and has timed out...
             if ((_ctx.iblist[i].lastSeenAt>0) 
                     && (((_ctx.iblist[i].major & 0xFF00) >> 8) == BLE_TYPE_PROXIMITY) 
-                    && (now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60)) {
+                    && ((now-_ctx.iblist[i].lastSeenAt)>(_ctx.exitTimeoutMins*60))) {
                 if (nbThisUL <= 0) {
                     // Find space in UL
                     int bytesInUL = app_core_msg_ul_remainingSz(ul);
                     // Check if space for TL and 1 ble at least
-                    if (bytesInUL < (TL_HDR_UL_SZ + EXIT_UL_SZ)) {
+                    if (bytesInUL < (TL_HDR_UL_SZ + PROX_EXIT_UL_SZ)) {
                         // move to next message and get size (0=no next!)
                         if ((bytesInUL = app_core_msg_ul_requestNextUL(ul)) <= 0) {
                             // no more messages, sorry
@@ -266,31 +295,38 @@ static bool getData(APP_CORE_UL_t* ul) {
                             break;      // from for, we're done here
                         }
                     }
-                    nbThisUL = (bytesInUL-TL_HDR_UL_SZ) / EXIT_UL_SZ; 
+                    nbThisUL = (bytesInUL-TL_HDR_UL_SZ) / PROX_EXIT_UL_SZ; 
                     if (nbThisUL > (nbContactEnd-nbAdded)) {
-                        // should always give a >0 answer as nbAdded is never >= nbExitToAdd here
+                        // should always give a >0 answer as nbAdded is never >= nbContactEnd here
                         nbThisUL = (nbContactEnd-nbAdded);
                         assert(nbThisUL>0);
                     }
-                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_EXIT, nbThisUL*EXIT_UL_SZ);
+                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_EXIT, nbThisUL*PROX_EXIT_UL_SZ);
                 }
                 if (vp!=NULL) {
-                    // add maj/min to UL : must be number of bytes equal to EXIT_UL_SZ
+                    int seenSinceMins = ((now - _ctx.iblist[i].firstSeenAt) / 60);
+                    // new format with devAddr/timeSinceEntered 
+                    memcpy(vp, &_ctx.iblist[i].devaddr[0], DEVADDR_SZ);
+                    vp+=DEVADDR_SZ;
+                    *vp++ = (seenSinceMins<255 ? seenSinceMins : 255);      // Total time seen in minutes, max'd at 255
+
+/*                    // add maj/min to UL : must be number of bytes equal to EXIT_UL_SZ
                     *vp++ = (_ctx.iblist[i].major & 0xFF);        // Just LSB of major
                     *vp++ = (_ctx.iblist[i].minor & 0xff);
                     *vp++ = ((_ctx.iblist[i].minor >> 8) & 0xff);
+*/
                     _ctx.iblist[i].inULCnt++;  
                     if (_ctx.iblist[i].inULCnt > _ctx.nbULRepeats) {
                         // delete from active list
                         _ctx.iblist[i].lastSeenAt=0;
                         _ctx.iblist[i].inULCnt=0;       // reset for next time
                     }
+                    log_debug("MBP: %04x:%04x exit, been in %d UL", _ctx.iblist[i].major, _ctx.iblist[i].minor, _ctx.iblist[i].inULCnt);
                     nbAdded++;
                     nbThisUL--;
                     if (nbAdded>=nbContactEnd) {
                         break;      // added all that we're allowed
                     }
-
                 } else {
                     // this should not happen if the previous calculations were correct...
                     log_debug("MBN: unexpected no space in UL for %d",nbThisUL);
@@ -336,9 +372,9 @@ static bool getData(APP_CORE_UL_t* ul) {
     if (_ctx.bleErrorMask!=0) {
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_ERRORMASK, 1, &_ctx.bleErrorMask);
     }
-    log_info("MBT:UL contact %d err %02x", 
-        nbContact, _ctx.bleErrorMask);
-    return (nbContact>0);
+    log_info("MBT:UL contact current %d new %d exit %d err %02x", 
+        nbContactCurrent, nbContactNew, nbContactEnd, _ctx.bleErrorMask);
+    return (nbContactNew>0 || nbContactEnd>0 || nbContactCurrent>0 || _ctx.bleErrorMask!=0);
 }
 
 static APP_CORE_API_t _api = {
