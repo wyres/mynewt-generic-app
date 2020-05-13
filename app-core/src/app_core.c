@@ -22,6 +22,7 @@
 #include "wyres-generic/lowpowermgr.h"
 #include "wyres-generic/timemgr.h"
 #include "wyres-generic/rebootmgr.h"
+#include "wyres-generic/wconsole.h"
 
 #include "loraapi/loraapi.h"
 
@@ -29,8 +30,8 @@
 #include "app-core/app_core.h"
 #include "app-core/app_msg.h"
 
-//MYNEWT_VAL(APP_CORE_MAX_MODS) - fix max number of modules to be the number actually defined
-#define MAX_MODS (APP_MOD_LAST + 1)
+//MYNEWT_VAL(APP_CORE_MAX_MODS) - fix max number of modules that may be defined in a specific target 
+#define MAX_MODS (8)        
 // Size of bit mask in bytes to contain all known modules
 #define MOD_MASK_SZ ((APP_MOD_LAST / 8) + 1)
 // The timeout before leaving UL sending state. Should be big enough to allow any DL to have arrived
@@ -173,7 +174,7 @@ static void deviceStateIndicate() {
     }
 }
 // Callback from config mgr when the actived modules mask changes
-static void configChangedCB(uint16_t key)
+static void configChangedCB(void* ctx, uint16_t key)
 {
     // just re-get all my config in case it changed
     CFMgr_getOrAddElement(CFG_UTIL_KEY_MODS_ACTIVE_MASK, &_ctx.modsMask[0], MOD_MASK_SZ);

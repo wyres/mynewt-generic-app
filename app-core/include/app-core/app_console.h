@@ -25,7 +25,8 @@ bool startConsole();
 void stopConsole();
 bool consoleIsInit();
 bool isConsoleActive();
-
+// Allow execution of an at cmd directly
+ATRESULT execConsoleCmd(PRINTLN_t pfn, uint8_t nargs, char* argv[]);
 #ifdef __cplusplus
 }
 #endif

@@ -50,8 +50,12 @@ typedef struct {
     uint32_t loraregion;         // as this is a build option
 } APP_CORE_FW_t;
 
-// Add module ids here (before the APP_MOD_LAST enum)
-typedef enum { APP_MOD_ENV=0, APP_MOD_GPS=1, APP_MOD_BLE_SCAN_NAV=2, APP_MOD_BLE_SCAN_TAGS=3, APP_MOD_BLE_IB=4, APP_MOD_IO=5, APP_MOD_PTI=6, APP_MOD_LAST } APP_MOD_ID_t;
+// Add module ids here (before the APP_MOD_LAST enum). Note that changing APP_MOD_LAST to indcrease number of module ids is ok,
+// but will impact upgrade on a device that had previous lower value (as changes the mod mask size in config)
+typedef enum { APP_MOD_ENV=0, APP_MOD_GPS=1, 
+            APP_MOD_BLE_SCAN_NAV=2, APP_MOD_BLE_SCAN_TAGS=3, APP_MOD_BLE_IB=4, 
+            APP_MOD_IO=5, APP_MOD_PTI=6, APP_MOD_BLE_CONSOLE=7, APP_MOD_BLE_SCANA_TAGS=8,
+            APP_MOD_LAST=31 } APP_MOD_ID_t;
 // Should module be run in parallel with others, or must it be alone (eg coz using a shared resource like a bus)?
 typedef enum { EXEC_PARALLEL, EXEC_SERIAL } APP_MOD_EXEC_t;
 // core api for modules

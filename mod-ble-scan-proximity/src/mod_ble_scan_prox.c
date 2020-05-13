@@ -47,27 +47,28 @@ static struct {
 } _ctx;
 
 /** callback fns from BLE generic package */
-static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
+static void ble_cb(WBLE_EVENT_t e, void* d) {
     switch(e) {
         case WBLE_COMM_FAIL: {
-            log_debug("MBT: comm nok");
+            log_debug("MBP: comm nok");
             _ctx.bleErrorMask |= EM_BLE_COMM_FAIL;
             break;
         }
         case WBLE_COMM_OK: {
-            log_debug("MBT: comm ok");
+            log_debug("MBP: comm ok");
             // Scan for just PROXIMITY type beacon? Future evolution : may also send up navigation beacons
             // Note that request for scan should not impact ibeaconning (v2 BLE can do both in parallel)
             wble_scan_start(_ctx.wbleCtx, _ctx.uuid, (BLE_TYPE_PROXIMITY<<8), (BLE_TYPE_PROXIMITY<<8) + 0xFF, MAX_BLE_TRACKED, &_ctx.iblist[0]);
             break;
         }
         case WBLE_SCAN_RX_IB: {
+            //ibeacon_data_t* ib = (ibeacon_data_t*)d;
 //            log_debug("MBT:ib %d:%d rssi %d", ib->major, ib->minor, ib->rssi);
             // wble mgr fills in / updates the list we gave it
             break;
         }
         default: {
-            log_debug("MBT cb %d", e);
+            log_debug("MBP cb %d", e);
             break;         
         }   
     }
@@ -149,7 +150,7 @@ static bool getData(APP_CORE_UL_t* ul) {
     
     // Check if table is full.
     int nActive = wble_getNbIBActive(_ctx.wbleCtx,0);
-    log_debug("MBP: proc %d active BLE", nActive);
+    log_debug("MBP: %d BLE", nActive);
     if (nActive==MAX_BLE_TRACKED) {
         _ctx.bleErrorMask |= EM_BLE_TABLE_FULL;        
     }
@@ -191,7 +192,7 @@ static bool getData(APP_CORE_UL_t* ul) {
     ctb[0] = (BLE_TYPE_PROXIMITY);
     ctb[1] = nbContactCurrent;
     if (app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_COUNT, 2, &ctb[0])) {
-        log_debug("MBP: proximity tags %d", nbContactCurrent);
+        log_debug("MBP: prox %d", nbContactCurrent);
     } else {
         // this should not happen if the previous calculations were correct...
         log_debug("MBP: no space in UL for prox count %d",nbContactCurrent);
@@ -372,7 +373,7 @@ static bool getData(APP_CORE_UL_t* ul) {
     if (_ctx.bleErrorMask!=0) {
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_ERRORMASK, 1, &_ctx.bleErrorMask);
     }
-    log_info("MBT:UL contact current %d new %d exit %d err %02x", 
+    log_info("MBp:UL curr %d new %d exit %d err %02x", 
         nbContactCurrent, nbContactNew, nbContactEnd, _ctx.bleErrorMask);
     return (nbContactNew>0 || nbContactEnd>0 || nbContactCurrent>0 || _ctx.bleErrorMask!=0);
 }

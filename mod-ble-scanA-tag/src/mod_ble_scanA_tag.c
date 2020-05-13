@@ -95,7 +95,7 @@ static bool addOrUpdateList(ibeacon_data_t* ib) {
 }
 #endif
 /** callback fns from BLE generic package */
-static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
+static void ble_cb(WBLE_EVENT_t e, void* d) {
     switch(e) {
         case WBLE_COMM_FAIL: {
             log_debug("MBT: comm nok");
@@ -521,6 +521,6 @@ void mod_ble_scanA_tag_init(void) {
     _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
 
     // hook app-core for ble scan - serialised as competing for UART
-    AppCore_registerModule("BLE-SCANA-TAG", APP_MOD_BLE_SCAN_TAGS, &_api, EXEC_SERIAL);
+    AppCore_registerModule("BLE-SCANA-TAG", APP_MOD_BLE_SCANA_TAGS, &_api, EXEC_SERIAL);
 //    log_debug("MB:mod-ble-scanA-tag inited");
 }

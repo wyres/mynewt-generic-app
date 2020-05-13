@@ -32,29 +32,30 @@
  */
 
 // WConsole at commands we use
-static ATRESULT atcmd_hello(uint8_t nargs, char* argv[]) {
-    wconsole_println("Hello.");
-    return ATCMD_OK;
+static ATRESULT atcmd_hello(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
+    (*pfn)("Hello.");
+    return ATCMD_PROCESSED;
 }
-static ATRESULT atcmd_who(uint8_t nargs, char* argv[]) {
+static ATRESULT atcmd_who(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     APP_CORE_FW_t* fwinfo = AppCore_getFwInfo();
-    wconsole_println("AppCore:%s (%lu)", fwinfo->fwname, Util_hashstrn(fwinfo->fwname, MAXFWNAME));
-    wconsole_println("Build v%d/%d.%d @%s", fwinfo->fwmaj, fwinfo->fwmin, fwinfo->fwbuild, fwinfo->fwdate);
+    (*pfn)("AppCore:%s (%lu)", fwinfo->fwname, Util_hashstrn(fwinfo->fwname, MAXFWNAME));
+    (*pfn)("Build v%d/%d.%d @%s", fwinfo->fwmaj, fwinfo->fwmin, fwinfo->fwbuild, fwinfo->fwdate);
 
-    return ATCMD_OK;
+    return ATCMD_PROCESSED;
 }
 // predef
-static ATRESULT atcmd_listcmds(uint8_t nargs, char* argv[]);
-static ATRESULT atcmd_reset(uint8_t nargs, char* argv[]) {
+static ATRESULT atcmd_listcmds(PRINTLN_t pfn, uint8_t nargs, char* argv[]);
+static ATRESULT atcmd_reset(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     // do reset
     RMMgr_reboot(RM_AT_ACTION);
     return ATCMD_OK;
 }
-static void printKey(uint16_t k) {
+static void printKey(void* ctx, uint16_t k) {
+    PRINTLN_t pfn = (PRINTLN_t)ctx;
     uint8_t d[16];
     // Must explicitly check for illegal key (0000) as used for error check ie assert in configmgr
     if (k==CFG_KEY_ILLEGAL) {
-        wconsole_println("Key[%04x]=NOT FOUND", k);
+        (*pfn)("Key[%04x]=NOT FOUND", k);
         return;
     }
     // get element max data length 16
@@ -62,24 +63,24 @@ static void printKey(uint16_t k) {
     switch(l) {
         case 0:
         case -1:  {
-            wconsole_println("Key[%04x]=NOT FOUND", k);
+            (*pfn)("Key[%04x]=NOT FOUND", k);
             break;
         }
         case 1: {
             // print as decimal
-            wconsole_println("Key[%04x]=%d", k, d[0]);
+            (*pfn)("Key[%04x]=%d", k, d[0]);
             break;
         }
         case 2: {
             // print as decimal
             uint16_t* vp = (uint16_t *)(&d[0]);     // avoid the overly keen anti-aliasing check
-            wconsole_println("Key[%04x]=%d / 0x%04x", k, *vp, *vp);
+            (*pfn)("Key[%04x]=%d / 0x%04x", k, *vp, *vp);
             break;
         }
         case 4: {
             // print as decimal
             uint32_t* vp = (uint32_t *)(&d[0]);     // avoid the overly keen anti-aliasing check
-            wconsole_println("Key[%04x]=%d / 0x%08x", k, *vp, *vp);
+            (*pfn)("Key[%04x]=%d / 0x%08x", k, *vp, *vp);
             break;
         }
         default: {
@@ -90,12 +91,12 @@ static void printKey(uint16_t k) {
                 sprintf(&hs[i*2], "%02x", d[i]);
             }
             hs[sz*2]='\0';
-            wconsole_println("Key[%04x]=0x%s", k, hs);
+            (*pfn)("Key[%04x]=0x%s", k, hs);
             break;
         }
     }
 }
-static ATRESULT atcmd_getcfg(uint8_t nargs, char* argv[]) {
+static ATRESULT atcmd_getcfg(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     // Check args - if 1 present then show just that config element else show all
     if (nargs>2) {
         return ATCMD_BADARG;
@@ -105,56 +106,56 @@ static ATRESULT atcmd_getcfg(uint8_t nargs, char* argv[]) {
         // Currently not possible as uart output buffer can't hold them all
 //        CFMgr_iterateKeys(-1, &printKey);
         // Tell user about groups instead
-        wconsole_println("Config modules available:");
-        wconsole_println(" 00 - System");
-        wconsole_println(" 01 - LoRaWAN");
-        wconsole_println(" 04 - AppCore");
-        wconsole_println(" 05 - AppMods"); 
+        (*pfn)("Config modules available:");
+        (*pfn)(" 00 - System");
+        (*pfn)(" 01 - LoRaWAN");
+        (*pfn)(" 04 - AppCore");
+        (*pfn)(" 05 - AppMods"); 
     } else if (nargs==2) {
         int k=0;
         int kl = strlen(argv[1]);
         if (kl==2) {
             // get 2 digit key module
             if (sscanf(argv[1], "%2x", &k)<1) {
-                wconsole_println("Bad module [%s] must be 2 digits", argv[1]);
+                (*pfn)("Bad module [%s] must be 2 digits", argv[1]);
                 return ATCMD_BADARG;
             } else {
                 // and dump all keys with this module
-                CFMgr_iterateKeys(k, &printKey);
+                CFMgr_iterateKeys(k, &printKey, (void*)pfn);
             }
         } else if (kl==4) {
             if (sscanf(argv[1], "%4x", &k)<1) {
-                wconsole_println("Bad key [%s] must be 4 hex digits", argv[1]);
+                (*pfn)("Bad key [%s] must be 4 hex digits", argv[1]);
                 return ATCMD_BADARG;
             } else {
-                printKey(k);
+                printKey(pfn, k);
             }
         } else {
-            wconsole_println("Error : Must give either key module as 2 digits, or full key of 4 digits");
+            (*pfn)("Error : Must give either key module as 2 digits, or full key of 4 digits");
             return ATCMD_BADARG;
         }
     }
-    return ATCMD_OK;
+    return ATCMD_PROCESSED;
 }
-static ATRESULT atcmd_setcfg(uint8_t nargs, char* argv[]) {
+static ATRESULT atcmd_setcfg(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     // args : cmd, config key (always 4 digits hex), config value as hex string (0x prefix) or decimal
     if (nargs<3) {
         return ATCMD_BADARG;
     }
     // parse key
     if (strlen(argv[1])!=4) {
-        wconsole_println("Key[%s] must be 4 digits", argv[1]);
+        (*pfn)("Key[%s] must be 4 digits", argv[1]);
         return ATCMD_BADARG;
     }
     int k=0;
     if (sscanf(argv[1], "%4x", &k)<1) {
-        wconsole_println("Key[%s] must be 4 digits", argv[1]);
+        (*pfn)("Key[%s] must be 4 digits", argv[1]);
     } else {
         // parse value
         int l = CFMgr_getElementLen(k);
         switch(l) {
             case 0: {
-                wconsole_println("Key[%s] does not exist", argv[1]);
+                (*pfn)("Key[%s] does not exist", argv[1]);
                 // TODO ? create in this case? maybe if a -c arg at the end? maybe not useful?
                 break;
             }
@@ -166,21 +167,21 @@ static ATRESULT atcmd_setcfg(uint8_t nargs, char* argv[]) {
                 char *vp = argv[2];
                 if (*vp=='0' && *(vp+1)=='x') {
                     if (strlen((vp+2))!=(l*2)) {
-                        wconsole_println("Key[%04x]=%s value is incorrect length. (expected %d bytes)", k, argv[2], l);
+                        (*pfn)("Key[%04x]=%s value is incorrect length. (expected %d bytes)", k, argv[2], l);
                         return ATCMD_BADARG;
                     }
                     if (sscanf((vp+2), "%x", &v)<1) {
-                        wconsole_println("Key[%04x] bad hex value:%s",k,vp);
+                        (*pfn)("Key[%04x] bad hex value:%s",k,vp);
                         return ATCMD_BADARG;
                     }
                 } else {
                     if (sscanf(vp, "%d", &v)<1) {
-                        wconsole_println("Key[%04x] bad dec value:%s",k,vp);
+                        (*pfn)("Key[%04x] bad dec value:%s",k,vp);
                         return ATCMD_BADARG;
                     }
                 }
                 CFMgr_setElement(k, &v, l);
-                printKey(k);        // Show the value now in the config 
+                printKey(pfn, k);        // Show the value now in the config 
                 break;
             }
 
@@ -193,11 +194,11 @@ static ATRESULT atcmd_setcfg(uint8_t nargs, char* argv[]) {
                 }
                 //Check got enough digits
                 if (strlen(vp)!=(l*2)) {
-                    wconsole_println("Key[%04x]=%s value is incorrect length. (expected %d bytes)", k, argv[2], l);
+                    (*pfn)("Key[%04x]=%s value is incorrect length. (expected %d bytes)", k, argv[2], l);
                     return ATCMD_BADARG;
                 }
                 if (l>16) {
-                    wconsole_println("Key[%04x] has length %d : cannot set (max 16)", k, l);
+                    (*pfn)("Key[%04x] has length %d : cannot set (max 16)", k, l);
                     return ATCMD_BADARG;
                 }
                 // gonna allow up to 16 bytes
@@ -206,42 +207,42 @@ static ATRESULT atcmd_setcfg(uint8_t nargs, char* argv[]) {
                     // sscanf into int (4 bytes) then copy just LSB as value for each byte
                     unsigned int b=0;
                     if (sscanf(vp, "%02x", &b)<1) {
-                        wconsole_println("Key[%04x] bad hex : %s", k, vp);
+                        (*pfn)("Key[%04x] bad hex : %s", k, vp);
                         return ATCMD_BADARG;
                     }
                     val[i] = b;
                     vp+=2;
                 }
                 CFMgr_setElement(k, &val[0], l);
-                printKey(k);
+                printKey(pfn, k);
                 break;
             }
         }
     }
-    return ATCMD_OK;
+    return ATCMD_PROCESSED;
 }
-static ATRESULT atcmd_getmods(uint8_t nargs, char* argv[]) {
+static ATRESULT atcmd_getmods(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     // Check args - if an arg present then show just that module else show all
     if (nargs>2) {
         return ATCMD_BADARG;
     }
     if (nargs==1) {
         for(int i=0;i<APP_MOD_LAST;i++) {
-            wconsole_println("Module[%d][%s]: %s", i, AppCore_getModuleName(i), AppCore_getModuleState(i)?"ON":"OFF");
+            (*pfn)("Module[%d][%s]: %s", i, AppCore_getModuleName(i), AppCore_getModuleState(i)?"ON":"OFF");
         }
     } else if (nargs==2) {
         int mid = atoi(argv[1]);
         if (mid<0 || mid>=APP_MOD_LAST) {
-            wconsole_println("Module id [%s] out of range",argv[1]);
+            (*pfn)("Module id [%s] out of range",argv[1]);
             return ATCMD_BADARG;
         } else {
-            wconsole_println("Module[%d][%s]: %s", mid, AppCore_getModuleName(mid), AppCore_getModuleState(mid)?"ON":"OFF");
+            (*pfn)("Module[%d][%s]: %s", mid, AppCore_getModuleName(mid), AppCore_getModuleState(mid)?"ON":"OFF");
         }
     }
 
-    return ATCMD_OK;
+    return ATCMD_PROCESSED;
 }
-static ATRESULT atcmd_setmod(uint8_t nargs, char* argv[]) {
+static ATRESULT atcmd_setmod(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     // args : cmd, module id, state 0 or 1
     if (nargs<3) {
         return ATCMD_BADARG;
@@ -249,7 +250,7 @@ static ATRESULT atcmd_setmod(uint8_t nargs, char* argv[]) {
     // parse key
     int mid = atoi(argv[1]);
     if (mid<0 || mid>=APP_MOD_LAST) {
-        wconsole_println("Module id [%s] out of range",argv[1]);
+        (*pfn)("Module id [%s] out of range",argv[1]);
         return ATCMD_BADARG;
     }
     // parse value
@@ -258,22 +259,22 @@ static ATRESULT atcmd_setmod(uint8_t nargs, char* argv[]) {
     } else if (strncmp(argv[2], "OFF", 3)==0) {
         AppCore_setModuleState(mid, false);
     }  else {
-        wconsole_println("Bad state [%s]: must be ON or OFF",argv[1]);
+        (*pfn)("Bad state [%s]: must be ON or OFF",argv[1]);
         return ATCMD_BADARG;
     }
-    wconsole_println("Module[%d][%s]: %s", mid, AppCore_getModuleName(mid), AppCore_getModuleState(mid)?"ON":"OFF");
+    (*pfn)("Module[%d][%s]: %s", mid, AppCore_getModuleName(mid), AppCore_getModuleState(mid)?"ON":"OFF");
 
     // set and return result
-    return ATCMD_OK;
+    return ATCMD_PROCESSED;
 }
-static ATRESULT atcmd_runcycle(uint8_t nargs, char* argv[]) {
-    wconsole_println("Exit console, run data collection...");
+static ATRESULT atcmd_runcycle(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
+    (*pfn)("Exit console, run data collection...");
     stopConsole();
     AppCore_forceUL(-1);
     return ATCMD_OK;
 }
 
-static ATRESULT atcmd_setlogs(uint8_t nargs, char* argv[]) {
+static ATRESULT atcmd_setlogs(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     if (nargs>1) {
         if (strcmp(argv[1], "DEBUG")==0) {
             set_log_level(LOGS_DEBUG);
@@ -288,54 +289,54 @@ static ATRESULT atcmd_setlogs(uint8_t nargs, char* argv[]) {
         } else if (strcmp(argv[1], "OFF")==0) {
             set_log_level(LOGS_OFF);
         } else {
-            wconsole_println("Unknown log level [%s] (must be DEBUG, INFO, RUN or OFF)", argv[1]);
+            (*pfn)("Unknown log level [%s] (must be DEBUG, INFO, RUN or OFF)", argv[1]);
             return ATCMD_BADARG;
         }
     }
     // And print new level
-    wconsole_println("Log level: %s", get_log_level_str());
-    return ATCMD_OK;
+    (*pfn)("Log level: %s", get_log_level_str());
+    return ATCMD_PROCESSED;
 }
-static ATRESULT atcmd_info(uint8_t nargs, char* argv[]) {
+static ATRESULT atcmd_info(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     // Display fw info, lora state, battery, last reboot reason, last assert etc etc
     SRMgr_start();
     APP_CORE_FW_t* fwinfo = AppCore_getFwInfo();
-    wconsole_println("FW:%s [%08x], v%d/%d.%d @%s ", fwinfo->fwname, Util_hashstrn(fwinfo->fwname, MAXFWNAME), 
+    (*pfn)("FW:%s [%08x], v%d/%d.%d @%s ", fwinfo->fwname, Util_hashstrn(fwinfo->fwname, MAXFWNAME), 
         fwinfo->fwmaj, fwinfo->fwmin, fwinfo->fwbuild, fwinfo->fwdate);
     int hwrev = BSP_getHwVer();
     if (hwrev==0) {
-        wconsole_println("HW:vProto");
+        (*pfn)("HW:vProto");
     } else if (hwrev<9) {
-        wconsole_println("HW:v2rev%c",hwrev==1?'B':(hwrev==2?'C':(hwrev==3?'D':'?')));
+        (*pfn)("HW:v2rev%c",hwrev==1?'B':(hwrev==2?'C':(hwrev==3?'D':'?')));
     } else {
-        wconsole_println("HW:v3rev%c",hwrev==10?'A':(hwrev==11?'B':(hwrev==12?'C':'?')));
+        (*pfn)("HW:v3rev%c",hwrev==10?'A':(hwrev==11?'B':(hwrev==12?'C':'?')));
     }
-    wconsole_println("Lora:Region %d Joined:%s", fwinfo->loraregion, lora_api_isJoined()?"YES":"NO");
-    wconsole_println("Batt:%d", SRMgr_getBatterymV());
-    wconsole_println("Light:%d", SRMgr_getLight());
-    wconsole_println("Logs: %s", get_log_level_str());
-    wconsole_println("LastReset: %04x", RMMgr_getResetReasonCode());
-    wconsole_println("LastAssert:[0x%08x]", RMMgr_getLastAssertCallerFn());
-    wconsole_println("LastWELog:[0x%08x]", RMMgr_getLogFn(0));
+    (*pfn)("Lora:Region %d Joined:%s", fwinfo->loraregion, lora_api_isJoined()?"YES":"NO");
+    (*pfn)("Batt:%d", SRMgr_getBatterymV());
+    (*pfn)("Light:%d", SRMgr_getLight());
+    (*pfn)("Logs: %s", get_log_level_str());
+    (*pfn)("LastReset: %04x", RMMgr_getResetReasonCode());
+    (*pfn)("LastAssert:[0x%08x]", RMMgr_getLastAssertCallerFn());
+    (*pfn)("LastWELog:[0x%08x]", RMMgr_getLogFn(0));
     SRMgr_stop();
-    return ATCMD_OK;
+    return ATCMD_PROCESSED;
 }
-static ATRESULT atcmd_selftest(uint8_t nargs, char* argv[]) {
+static ATRESULT atcmd_selftest(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     // check hw elements
     // flash/eeprom ok or would not have started
     APP_CORE_FW_t* fwinfo = AppCore_getFwInfo();
-    wconsole_println("FW:%s, v%d/%d.%d @%s", fwinfo->fwname, fwinfo->fwmaj, fwinfo->fwmin, fwinfo->fwbuild, fwinfo->fwdate);
+    (*pfn)("FW:%s, v%d/%d.%d @%s", fwinfo->fwname, fwinfo->fwmaj, fwinfo->fwmin, fwinfo->fwbuild, fwinfo->fwdate);
     // Check altimeter/battery/temp are 'reasonable'
     SRMgr_start();
     // delay a little
     // check accelero  
-    wconsole_println("ACCEL:%s", (MMMgr_start() && MMMgr_check())?"OK":"NOK");
+    (*pfn)("ACCEL:%s", (MMMgr_start() && MMMgr_check())?"OK":"NOK");
     // ? SX1272?
-    wconsole_println("BATT[%d]:%s",SRMgr_getBatterymV(), (SRMgr_getBatterymV()>2000 && SRMgr_getBatterymV()<4000)?"OK":"NOK");
-    wconsole_println("ALTI[%d]:%s", SRMgr_getPressurePa(), (SRMgr_getPressurePa()>90000 && SRMgr_getPressurePa()<120000)?"OK":"NOK");
-    wconsole_println("TEMP[%d]:%s", SRMgr_getTempcC(), (SRMgr_getTempcC()>-4000 && SRMgr_getTempcC()<9000)?"OK":"NOK");
+    (*pfn)("BATT[%d]:%s",SRMgr_getBatterymV(), (SRMgr_getBatterymV()>2000 && SRMgr_getBatterymV()<4000)?"OK":"NOK");
+    (*pfn)("ALTI[%d]:%s", SRMgr_getPressurePa(), (SRMgr_getPressurePa()>90000 && SRMgr_getPressurePa()<120000)?"OK":"NOK");
+    (*pfn)("TEMP[%d]:%s", SRMgr_getTempcC(), (SRMgr_getTempcC()>-4000 && SRMgr_getTempcC()<9000)?"OK":"NOK");
     SRMgr_stop();
-    return ATCMD_OK;
+    return ATCMD_PROCESSED;
 }
     
 static ATCMD_DEF_t ATCMDS[] = {
@@ -355,12 +356,28 @@ static ATCMD_DEF_t ATCMDS[] = {
     { .cmd="AT+RUN", .desc="Go for active cycle immediately", atcmd_runcycle},
     { .cmd="AT+LOG", .desc="Set logging level", atcmd_setlogs},
 };
-static ATRESULT atcmd_listcmds(uint8_t nargs, char* argv[]) {
+static ATRESULT atcmd_listcmds(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     uint8_t cl = sizeof(ATCMDS)/sizeof(ATCMDS[0]);
     for(int i=0;i<cl;i++) {
-        wconsole_println("%s: %s", ATCMDS[i].cmd, ATCMDS[i].desc);
+        (*pfn)("%s: %s", ATCMDS[i].cmd, ATCMDS[i].desc);
     }
-    return ATCMD_OK;
+    return ATCMD_PROCESSED;
+}
+
+// Allow a function to execute an at command found in argv[0] of the parsed command line, and output to the given println fn
+ATRESULT execConsoleCmd(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
+    // find it in the list
+    uint8_t cl = sizeof(ATCMDS)/sizeof(ATCMDS[0]);
+    for(int i=0;i<cl;i++) {
+        if (strcmp(argv[0], ATCMDS[i].cmd)==0) {
+            // gotcha
+            log_debug("got cmd %s with %d args", argv[0], nargs);
+            // call the specific command processor function as registered
+            return (*ATCMDS[i].fn)(pfn, nargs, argv);
+        }
+    }
+    // not found
+    return ATCMD_GENERR;
 }
 
 void initConsole() {

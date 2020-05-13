@@ -255,7 +255,7 @@ static bool addOrUpdateList(ibeacon_data_t* ib) {
 }
 #endif
 /** callback fns from BLE generic package */
-static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
+static void ble_cb(WBLE_EVENT_t e, void* d) {
     switch(e) {
         case WBLE_COMM_FAIL: {
             log_debug("MBT: comm nok");
