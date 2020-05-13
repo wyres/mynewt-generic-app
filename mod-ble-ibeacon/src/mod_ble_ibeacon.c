@@ -36,7 +36,7 @@ static struct {
 };
 
 /** callback fns from BLE generic package */
-static void ble_cb(WBLE_EVENT_t e, ibeacon_data_t* ib) {
+static void ble_cb(WBLE_EVENT_t e, void* d) {
     switch(e) {
         case WBLE_COMM_FAIL: {
             log_debug("MBB: comm nok");
