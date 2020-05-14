@@ -27,7 +27,7 @@
 static struct {
     void* wbleCtx;
     uint32_t beaconPeriodMS;
-    uint8_t UUID[8];
+    uint8_t UUID[UUID_SZ];
     uint16_t major;
     uint16_t minor;
     int8_t txpower;

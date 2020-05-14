@@ -32,6 +32,8 @@
 
 // Max ibeacons we track in the scan history. We give ourselves some space over the defined limit to deal with the 'exit' timeouts.
 #define MAX_BLE_TRACKED (MYNEWT_VAL(MOD_BLE_MAXIBS_TAG_INZONE)+10)
+// Max ibeacons we sent up of navigation type (MSB major = 0x00)
+#define MAX_NAV (5)
 
 static struct {
     void* wbleCtx;
@@ -40,6 +42,8 @@ static struct {
     int8_t contactSignifRSSI;
     uint8_t maxContactsPerUL;
     ibeacon_data_t iblist[MAX_BLE_TRACKED];
+    ibeacon_data_t navIBList[MAX_NAV];      // list of 'best' navigation beacons currently
+    uint8_t nbNav;
     uint8_t bleErrorMask;
     uint8_t nbULRepeats;
     uint8_t uuid[UUID_SZ];
@@ -56,9 +60,9 @@ static void ble_cb(WBLE_EVENT_t e, void* d) {
         }
         case WBLE_COMM_OK: {
             log_debug("MBP: comm ok");
-            // Scan for just PROXIMITY type beacon? Future evolution : may also send up navigation beacons
+            // Scan for both PROXIMITY and navigation beacons (sadly this means we get all the guys in between too but life...)
             // Note that request for scan should not impact ibeaconning (v2 BLE can do both in parallel)
-            wble_scan_start(_ctx.wbleCtx, _ctx.uuid, (BLE_TYPE_PROXIMITY<<8), (BLE_TYPE_PROXIMITY<<8) + 0xFF, MAX_BLE_TRACKED, &_ctx.iblist[0]);
+            wble_scan_start(_ctx.wbleCtx, _ctx.uuid, (BLE_TYPE_NAV<<8), (BLE_TYPE_PROXIMITY<<8) + 0xFF, MAX_BLE_TRACKED, &_ctx.iblist[0]);
             break;
         }
         case WBLE_SCAN_RX_IB: {
@@ -148,6 +152,9 @@ static bool getData(APP_CORE_UL_t* ul) {
 
     uint32_t now = TMMgr_getRelTimeSecs();
     
+    // nav beacon list is emptied before processing
+    _ctx.nbNav = 0;
+
     // Check if table is full.
     int nActive = wble_getNbIBActive(_ctx.wbleCtx,0);
     log_debug("MBP: %d BLE", nActive);
@@ -177,6 +184,36 @@ static bool getData(APP_CORE_UL_t* ul) {
                     // If the RSSI is 'too low' then delete from list
                     // TODO : do we mean any individual rx is too low, or the mean rssi is too low, or all the rx rssis are too low??
                 }
+            } else if (bletype==BLE_TYPE_NAV) {
+                // fine gonna pick the best 3
+                // if not up to max size, just add to list
+                if (_ctx.nbNav<MAX_NAV) {
+                    // Only copy the bits we need for UL
+                    _ctx.navIBList[_ctx.nbNav].major = _ctx.iblist[i].major;
+                    _ctx.navIBList[_ctx.nbNav].minor = _ctx.iblist[i].minor;
+                    _ctx.navIBList[_ctx.nbNav].rssi = _ctx.iblist[i].rssi;
+                    _ctx.navIBList[_ctx.nbNav].extra = _ctx.iblist[i].extra;
+                    _ctx.nbNav++;
+                } else {
+                    // find lowest in list that is lower than the one we're looking at
+                    int worstRSSI = _ctx.iblist[i].rssi;
+                    int worstRSSIIdx = -1;
+                    for(int nvi = 0; nvi < MAX_NAV; nvi++) {
+                        if (_ctx.navIBList[nvi].rssi < worstRSSI) {
+                            worstRSSI = _ctx.navIBList[nvi].rssi;
+                            worstRSSIIdx = nvi;
+                        }
+                    }
+                    if (worstRSSIIdx>=0) {
+                        // new guy is better than someone, overwrite him in the list
+                        _ctx.navIBList[worstRSSIIdx].major = _ctx.iblist[i].major;
+                        _ctx.navIBList[worstRSSIIdx].minor = _ctx.iblist[i].minor;
+                        _ctx.navIBList[worstRSSIIdx].rssi = _ctx.iblist[i].rssi;
+                        _ctx.navIBList[worstRSSIIdx].extra = _ctx.iblist[i].extra;
+                    }
+                }
+                // and remove nav beacons from main table each time
+                _ctx.iblist[i].lastSeenAt = 0;
             } else {
                 // ignore, shouldn't happen as the scanner was told to ignore these guys
                 log_warn("MBP:remove unex type=%d", bletype);
@@ -185,6 +222,24 @@ static bool getData(APP_CORE_UL_t* ul) {
                 _ctx.iblist[i].lastSeenAt=0;
             }
         }
+    }
+    if (_ctx.nbNav>0) {
+        // put it into UL if possible
+        uint8_t* vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_CURR,_ctx.nbNav*5);
+        if (vp!=NULL) {
+            for(int i=0;i<_ctx.nbNav;i++) {
+                *vp++ = (_ctx.navIBList[i].major & 0xff);
+                // no point in sending up MSB of major, not used in id
+//                *vp++ = ((_ctx.bestiblist[i].major >> 8) & 0xff);
+                *vp++ = (_ctx.navIBList[i].minor & 0xff);
+                *vp++ = ((_ctx.navIBList[i].minor >> 8) & 0xff);
+                *vp++ = _ctx.navIBList[i].rssi;
+                *vp++ = _ctx.navIBList[i].extra;
+            }
+        }
+    } else {
+        // add empty TLV to signal we scanned but didnt see them
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_CURR, 0, NULL);
     }
 
         // tell backend just how many people are around me right now
@@ -302,7 +357,7 @@ static bool getData(APP_CORE_UL_t* ul) {
                         nbThisUL = (nbContactEnd-nbAdded);
                         assert(nbThisUL>0);
                     }
-                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_EXIT, nbThisUL*PROX_EXIT_UL_SZ);
+                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_PROX_EXIT, nbThisUL*PROX_EXIT_UL_SZ);
                 }
                 if (vp!=NULL) {
                     int seenSinceMins = ((now - _ctx.iblist[i].firstSeenAt) / 60);
