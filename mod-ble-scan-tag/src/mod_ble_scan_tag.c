@@ -187,7 +187,7 @@ static ibeacon_data_t STATIC_TEST_IBLIST_COUNT[] = {
 #endif
 
 #define ENTER_UL_SZ (5)
-#define EXIT_UL_SZ (3)
+#define EXIT_UL_SZ (4)
 #define COUNT_UL_SZ (2)
 #define PRESENCE_HDR_UL_SZ (2)
 #define TL_HDR_UL_SZ (2)
@@ -481,10 +481,12 @@ static bool getData(APP_CORE_UL_t* ul) {
                     vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_EXIT, nbThisUL*EXIT_UL_SZ);
                 }
                 if (vp!=NULL) {
+                    int seenSinceMins = ((now - _ctx.iblist[i].firstSeenAt) / 60);
                     // add maj/min to UL : must be number of bytes equal to EXIT_UL_SZ
                     *vp++=(_ctx.iblist[i].major & 0xFF);        // Just LSB of major
                     *vp++ = (_ctx.iblist[i].minor & 0xff);
                     *vp++ = ((_ctx.iblist[i].minor >> 8) & 0xff);
+                    *vp++ = (seenSinceMins<255 ? seenSinceMins : 255);      // Total time seen in minutes, max'd at 255
                     // delete from active list
                     _ctx.iblist[i].lastSeenAt=0;
                     nbAdded++;

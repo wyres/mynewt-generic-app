@@ -32,7 +32,7 @@
 
 static struct {
     void* wbleCtx;
-    uint8_t txbuf[MAX_TXSZ+1];
+    uint8_t txbuf[MAX_TXSZ+3];      // space for \r\n\0 if required
 } _ctx;
 
 // Redecs
@@ -75,7 +75,7 @@ static void ble_cb(WBLE_EVENT_t e, void* d) {
 // My api functions
 static uint32_t start() {
     // start ble to go (may already be running), with a callback to tell me when its comm is ok (may be immediate if already running)
-    // Request to scan is sent once comm is ok
+    // Request to check for connection is sent once comm is ok
     wble_start(_ctx.wbleCtx, ble_cb);
 
     return 30*60*1000;      // you can have the console on for 30 minutes max (make sure can't be stuck forever)
@@ -120,23 +120,24 @@ static bool wble_line_println(const char* l, ...) {
     va_start(vl, l);
     vsprintf((char*)&_ctx.txbuf[0], l, vl);
     int len = strnlen((const char*)&_ctx.txbuf[0], MAX_TXSZ);
-    if ((len)>=MAX_TXSZ) {
+    if (len>=MAX_TXSZ) {
         // oops might just have broken stuff...
-        _ctx.txbuf[MAX_TXSZ-1] = '\0';
+        len = MAX_TXSZ-1;
         ret = false;        // caller knows there was an issue
-    } else {
-        _ctx.txbuf[len]='\n';
-        _ctx.txbuf[len+1]='\r';
-        _ctx.txbuf[len+2]='\0';
-        len+=3;
     }
+    _ctx.txbuf[len]='\n';
+    _ctx.txbuf[len+1]='\r';
+    _ctx.txbuf[len+2]=0;
+    len+=2;     // Don't send the null byte!
     int res = wble_line_write(_ctx.wbleCtx, &_ctx.txbuf[0], len);
     if (res<0) {
         _ctx.txbuf[0] = '*';
         wble_line_write(_ctx.wbleCtx, &_ctx.txbuf[0], 1);      // so user knows he missed something.
         ret = false;        // caller knows there was an issue
         // Not actually a lot we can do about this especially if its a flow control (SKT_NOSPACE) condition - ignore it
-        log_noout_fn("console write FAIL %d", res);      // just for debugger to watch
+        log_debug("MBC wfail %d", res);      // just for debugger to watch
+    } else {
+        log_debug("MBC wok %d", len);      // just for debugger to watch
     }
     va_end(vl);
     return ret;
@@ -187,15 +188,15 @@ static void processATCmd(char* line) {
     ATRESULT res = execConsoleCmd(&wble_line_println, elsi, els);
     switch(res) {
         case ATCMD_OK: {
-            wble_line_println("OK\r\n");
+            wble_line_println("OK");
             break;
         }
         case ATCMD_GENERR: {
-            wble_line_println("ERROR\r\n");
+            wble_line_println("ERROR");
             break;
         }
         case ATCMD_BADCMD: {
-            wble_line_println("ERROR\r\n");
+            wble_line_println("ERROR");
             wble_line_println("Unknown command [%s].", els[0]);
             log_debug("no cmd %s with %d args", els[0], elsi-1);
         }

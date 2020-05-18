@@ -25,8 +25,21 @@
 #include "app-core/app_msg.h"
 #include "mod-ble/mod_ble.h"
 
+// Define this to get devaddress as remote contact id, rather than major/minor
+//#define SEND_DEVADDR    1
+
+#ifdef SEND_DEVADDR
 #define PROX_ENTER_UL_SZ (8)
 #define PROX_EXIT_UL_SZ (7)
+#define PROX_ENTER_TAG (APP_CORE_UL_BLE_PROX_ENTER)
+#define PROX_EXIT_TAG (APP_CORE_UL_BLE_PROX_EXIT)
+#else 
+#define PROX_ENTER_UL_SZ (5)
+#define PROX_EXIT_UL_SZ (4)
+#define PROX_ENTER_TAG (APP_CORE_UL_BLE_ENTER)
+#define PROX_EXIT_TAG (APP_CORE_UL_BLE_EXIT)
+#endif
+
 #define COUNT_UL_SZ (2)
 #define TL_HDR_UL_SZ (2)
 
@@ -120,7 +133,7 @@ static void stop() {
     uint16_t major = (BLE_TYPE_PROXIMITY<<8) + devEUI[5];
     uint16_t minor = (devEUI[6] << 8) + devEUI[7];
     uint16_t interMS = 500;
-    int8_t txpower = -10;
+    int8_t txpower = -30;
     CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_MAJOR, &major, 2);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_MINOR, &minor, 2);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_PERIOD_MS, &interMS, 2);
@@ -215,9 +228,8 @@ static bool getData(APP_CORE_UL_t* ul) {
                 // and remove nav beacons from main table each time
                 _ctx.iblist[i].lastSeenAt = 0;
             } else {
-                // ignore, shouldn't happen as the scanner was told to ignore these guys
-                log_warn("MBP:remove unex type=%d", bletype);
-                _ctx.bleErrorMask |= EM_BLE_RX_BADMAJ;
+                // ignore. may happen as we scan from nav to prox majors, and this includes other types we don't care about
+                log_debug("MBP:remove unex type=%d", bletype);
                 // Free up the space
                 _ctx.iblist[i].lastSeenAt=0;
             }
@@ -291,22 +303,24 @@ static bool getData(APP_CORE_UL_t* ul) {
                         nbThisUL = (nbContactNew-nbAdded);
                         assert(nbThisUL>0);
                     }
-                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_PROX_ENTER, nbThisUL*PROX_ENTER_UL_SZ);
+                    vp = app_core_msg_ul_addTLgetVP(ul, PROX_ENTER_TAG, nbThisUL*PROX_ENTER_UL_SZ);
                 }
                 if (vp!=NULL) {
+#ifdef SEND_DEVADDR
                     int seenSinceMins = ((now - _ctx.iblist[i].firstSeenAt) / 60);
                     // new format with devAddr/timeSinceEntered/RSSI 
                     memcpy(vp, &_ctx.iblist[i].devaddr[0], DEVADDR_SZ);
                     vp+=DEVADDR_SZ;
-/*
+                    *vp++ = _ctx.iblist[i].rssi;
+                    *vp++ = (seenSinceMins<255 ? seenSinceMins : 255);      // Total time seen in minutes, max'd at 255
+#else
                     // add maj/min to UL (number of bytes == ENTER_UL_SZ)
                     *vp++ = (_ctx.iblist[i].major & 0xFF);        // Just LSB of major
                     *vp++ = (_ctx.iblist[i].minor & 0xff);
                     *vp++ = ((_ctx.iblist[i].minor >> 8) & 0xff);
-                    *vp++ = _ctx.iblist[i].extra;
-*/
                     *vp++ = _ctx.iblist[i].rssi;
-                    *vp++ = (seenSinceMins<255 ? seenSinceMins : 255);      // Total time seen in minutes, max'd at 255
+                    *vp++ = _ctx.iblist[i].extra;
+#endif
                     
                     // we want to tell backend at least twice per contact
                     _ctx.iblist[i].inULCnt++;  
@@ -357,20 +371,22 @@ static bool getData(APP_CORE_UL_t* ul) {
                         nbThisUL = (nbContactEnd-nbAdded);
                         assert(nbThisUL>0);
                     }
-                    vp = app_core_msg_ul_addTLgetVP(ul, APP_CORE_UL_BLE_PROX_EXIT, nbThisUL*PROX_EXIT_UL_SZ);
+                    vp = app_core_msg_ul_addTLgetVP(ul, PROX_EXIT_TAG, nbThisUL*PROX_EXIT_UL_SZ);
                 }
                 if (vp!=NULL) {
                     int seenSinceMins = ((now - _ctx.iblist[i].firstSeenAt) / 60);
+#ifdef SEND_DEVADDR
                     // new format with devAddr/timeSinceEntered 
                     memcpy(vp, &_ctx.iblist[i].devaddr[0], DEVADDR_SZ);
                     vp+=DEVADDR_SZ;
                     *vp++ = (seenSinceMins<255 ? seenSinceMins : 255);      // Total time seen in minutes, max'd at 255
-
-/*                    // add maj/min to UL : must be number of bytes equal to EXIT_UL_SZ
+#else
+                    // add maj/min to UL : must be number of bytes equal to EXIT_UL_SZ
                     *vp++ = (_ctx.iblist[i].major & 0xFF);        // Just LSB of major
                     *vp++ = (_ctx.iblist[i].minor & 0xff);
                     *vp++ = ((_ctx.iblist[i].minor >> 8) & 0xff);
-*/
+                    *vp++ = (seenSinceMins<255 ? seenSinceMins : 255);      // Total time seen in minutes, max'd at 255
+#endif
                     _ctx.iblist[i].inULCnt++;  
                     if (_ctx.iblist[i].inULCnt > _ctx.nbULRepeats) {
                         // delete from active list

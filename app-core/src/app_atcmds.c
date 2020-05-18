@@ -338,7 +338,35 @@ static ATRESULT atcmd_selftest(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     SRMgr_stop();
     return ATCMD_PROCESSED;
 }
-    
+static ATRESULT atcmd_hexline(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
+    // fota operation
+    if (nargs!=4) {
+        return ATCMD_GENERR;
+    }
+    // Parse args
+    uint32_t addr;
+    unsigned int crc1byte;
+    if (sscanf(argv[1], "%lx", &addr)!=1) {
+        return ATCMD_BADARG;
+    }
+    if (sscanf(argv[3], "%x", &crc1byte)!=1) {
+        return ATCMD_BADARG;
+    }
+    // Up to 16 bytes in the hex (but allowed to have less)
+    static uint8_t _fotadata[16];
+    int len = Util_scanhex(argv[2], 16, &_fotadata[0]);
+    // But not 0
+    if (len==0) {
+        return ATCMD_BADARG;
+    }
+    // give to fota for validation and action
+// TODO    if (fota_newData(addr, data, len, crc1byte)) { return ATCMD_OK;} else { return ATCMD_GENERR; }
+    // test echo the line
+    (*pfn)("%s %08x %s %02x", argv[0],addr,argv[2],crc1byte);
+    // Ack with OK (serves as flow control also)
+    return ATCMD_OK;
+}
+
 static ATCMD_DEF_t ATCMDS[] = {
     { .cmd="AT", .desc="Wakeup", atcmd_hello},
     { .cmd="AT+HELLO", .desc="Wakeup", atcmd_hello},
@@ -355,6 +383,7 @@ static ATCMD_DEF_t ATCMDS[] = {
     { .cmd="AT+SETMODS", .desc="Set module state", atcmd_setmod},
     { .cmd="AT+RUN", .desc="Go for active cycle immediately", atcmd_runcycle},
     { .cmd="AT+LOG", .desc="Set logging level", atcmd_setlogs},
+    { .cmd="AT+H", .desc="FOTA hex download", atcmd_hexline},
 };
 static ATRESULT atcmd_listcmds(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     uint8_t cl = sizeof(ATCMDS)/sizeof(ATCMDS[0]);
