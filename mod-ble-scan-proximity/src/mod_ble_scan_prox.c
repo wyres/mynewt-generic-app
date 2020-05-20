@@ -388,6 +388,8 @@ static bool getData(APP_CORE_UL_t* ul) {
                     *vp++ = (seenSinceMins<255 ? seenSinceMins : 255);      // Total time seen in minutes, max'd at 255
 #endif
                     _ctx.iblist[i].inULCnt++;  
+                    // TODO Problem here - intermittant reception can mean getting a 'exit' in 1 or 2 UL, but then we rx, so no longer in exit,
+                    // but not new, so didn't get an enter.... backend will be confused...
                     if (_ctx.iblist[i].inULCnt > _ctx.nbULRepeats) {
                         // delete from active list
                         _ctx.iblist[i].lastSeenAt=0;

@@ -37,6 +37,7 @@ static struct {
 
 // Redecs
 static void processATCmd(char* line);
+static bool bleconsole_println(const char* l, ...);
 
 /** callback fns from BLE generic package */
 static void ble_cb(WBLE_EVENT_t e, void* d) {
@@ -56,7 +57,11 @@ static void ble_cb(WBLE_EVENT_t e, void* d) {
             break;
         }
         case WBLE_UART_CONN: {
-            log_debug("MBC: uart running ok");
+            log_debug("MBC: uart ok");
+            // Send initial "OK" so remote user knows we have connected
+            APP_CORE_FW_t* fwinfo = AppCore_getFwInfo();
+            bleconsole_println("WConsole v%d.%d/%d", fwinfo->fwmaj, fwinfo->fwmin, fwinfo->fwbuild);
+            bleconsole_println("OK");
             break;
         }
         case WBLE_UART_RX: {
@@ -114,7 +119,7 @@ void mod_ble_wconsole_init(void) {
 //    log_debug("MB:mod-ble-wconsole inited");
 }
 
-static bool wble_line_println(const char* l, ...) {
+static bool bleconsole_println(const char* l, ...) {
     bool ret = true;
     va_list vl;
     va_start(vl, l);
@@ -185,19 +190,19 @@ static void processATCmd(char* line) {
     }
 
     // Ask the appcode atcmd console to process it
-    ATRESULT res = execConsoleCmd(&wble_line_println, elsi, els);
+    ATRESULT res = execConsoleCmd(&bleconsole_println, elsi, els);
     switch(res) {
         case ATCMD_OK: {
-            wble_line_println("OK");
+            bleconsole_println("OK");
             break;
         }
         case ATCMD_GENERR: {
-            wble_line_println("ERROR");
+            bleconsole_println("ERROR");
             break;
         }
         case ATCMD_BADCMD: {
-            wble_line_println("ERROR");
-            wble_line_println("Unknown command [%s].", els[0]);
+            bleconsole_println("ERROR");
+            bleconsole_println("Unknown command [%s].", els[0]);
             log_debug("no cmd %s with %d args", els[0], elsi-1);
         }
         default:
