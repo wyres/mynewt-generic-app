@@ -153,11 +153,25 @@ static int findModuleById(APP_MOD_ID_t mid) {
     // not found
     return -1;
 }
-static void enterStockMode(struct appctx *ctx) {
-    // To enter stock mode, we reboot with a specific reboot reason, and the rebootmgr will
-    // do the enter. This ensures that if the MCU internal watchdog timer is running, it will
-    // be disabled (example: STM32 IWDG timer cannot be stopped once started, and runs even in STOP/STANDBY modes)
-    RMMgr_reboot(RM_ENTER_STOCK_MODE);      
+
+// Check if reboot flag is set ie request for a reboot.
+static void checkReboot(struct appctx *ctx) {
+    if (ctx->doReboot) {
+        // Ok. Check if the reboot is 'normal' or into stock mode
+        if (ctx->notStockMode==0) {
+            log_debug("AC: reboot pending for stock mode... bye bye....");
+            // To enter stock mode, we reboot with a specific reboot reason, and the rebootmgr will
+            // do the enter. This ensures that if the MCU internal watchdog timer is running, it will
+            // be disabled (example: STM32 IWDG timer cannot be stopped once started, and runs even in STOP/STANDBY modes)
+            RMMgr_reboot(RM_ENTER_STOCK_MODE);      
+        } else {
+            log_debug("AC: reboot pending due to DL action... bye bye....");
+            RMMgr_reboot(RM_DM_ACTION);      
+        }
+        // assert just in case didn't actually reboot...
+        log_error("AC: should have rebooted!");
+        assert(0);
+    }
 }
 //helper to indicate device state in idle phase if required
 static void deviceStateIndicate() {
@@ -364,14 +378,7 @@ static SM_STATE_ID_t State_TryJoin(void *arg, int e, void *data)
     {
     case SM_ENTER:
     {
-        if (ctx->doReboot)
-        {
-            log_debug("AC:enter try join and reboot pending... bye bye....");
-            RMMgr_reboot(RM_DM_ACTION);
-            // Fall out just in case didn't actually reboot...
-            log_error("AC: should have rebooted!");
-            assert(0);
-        }
+        checkReboot(ctx);
         // Stop all leds, and flash fast both to show we're trying join
         ledStart(MYNEWT_VAL(MODS_ACTIVE_LED), FLASH_5HZ, -1);
         ledStart(MYNEWT_VAL(NET_ACTIVE_LED), FLASH_5HZ, -1);
@@ -475,9 +482,10 @@ static SM_STATE_ID_t State_Stock(void *arg, int e, void *data)
     }
     case SM_TIMEOUT:
     {
-        enterStockMode(ctx);
-        // Will not return normally
-        assert(0);
+        // Reboot into stock mode
+        ctx->doReboot = true;
+        ctx->notStockMode = 0;      // normally the case if entered this state
+        checkReboot(ctx);
         return SM_STATE_CURRENT;
     }
     default:
@@ -496,14 +504,7 @@ static SM_STATE_ID_t State_WaitJoinRetry(void *arg, int e, void *data)
     {
     case SM_ENTER:
     {
-        if (ctx->doReboot)
-        {
-            log_debug("AC:wjr reboot bye bye....");
-            RMMgr_reboot(RM_DM_ACTION);
-            // Fall out just in case didn't actually reboot...
-            log_error("AC: should have rebooted!");
-            assert(0);
-        }
+        checkReboot(ctx);
         // Start the retry join timeout
         ctx->nbJoinAttempts++;
         // We are allowing up to X tries with just Y second intervals, after which we go to a longer timeout of Z mins
@@ -566,14 +567,7 @@ static SM_STATE_ID_t State_Idle(void *arg, int e, void *data)
     {
     case SM_ENTER:
     {
-        if (ctx->doReboot)
-        {
-            log_debug("AC:enter idle and reboot pending... bye bye....");
-            RMMgr_reboot(RM_DM_ACTION);
-            // Fall out just in case didn't actually reboot...
-            log_error("AC: should have rebooted!");
-            assert(0);
-        }
+        checkReboot(ctx);
         //Initialise the DM we're sending next time -> this means executed actions can start to fill it during idle time
         app_core_msg_ul_init(&ctx->txmsg);
         ctx->ulIsCrit = false; // assume we're not gonna send it (its not critical)
@@ -1301,6 +1295,12 @@ static void executeDL(struct appctx *ctx, APP_CORE_DL_t *data)
 static void A_reboot(uint8_t *v, uint8_t l)
 {
     log_info("action REBOOT");
+    // TODO : if a value is given and is 1 -> goto stock mode ie clear stock flag and reboot into halt
+    if (l>0 && v[0]==1) {
+        // Update to say we ARE in stock mode
+        _ctx.notStockMode = 0;
+        CFMgr_setElement(CFG_UTIL_KEY_STOCK_MODE, &_ctx.notStockMode, 1);
+    }
     // must wait till execute actions finished
     _ctx.doReboot = true;
 }
