@@ -133,7 +133,7 @@ static void stop() {
     uint16_t major = (BLE_TYPE_PROXIMITY<<8) + devEUI[5];
     uint16_t minor = (devEUI[6] << 8) + devEUI[7];
     uint16_t interMS = 500;
-    int8_t txpower = -30;
+    int8_t txpower = -20;
     CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_MAJOR, &major, 2);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_MINOR, &minor, 2);
     CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_PERIOD_MS, &interMS, 2);
