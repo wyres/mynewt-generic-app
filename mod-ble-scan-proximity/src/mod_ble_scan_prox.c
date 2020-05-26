@@ -122,9 +122,7 @@ static uint32_t start() {
 }
 
 static void stop() {
-    // Done BLE scan
-    wble_scan_stop(_ctx.wbleCtx);
-    // ibeaconning is normally running, but redo the start each time to get any param changes.
+/*    // ibeaconning is normally running, but redo the start each time to get any param changes.
     // Default major/minor are the low 3 bytes from the lora devEUI...
     uint8_t devEUI[8];
     memset(&devEUI[0], 0, 8);       // Ensure all 0s if no deveui available
@@ -144,6 +142,10 @@ static void stop() {
     major = (BLE_TYPE_PROXIMITY<<8) + (major & 0xFF);
     // Again, switch to ibeaconning ok directly from scanning
     wble_ibeacon_start(_ctx.wbleCtx, _ctx.uuid, major, minor, 0, interMS, txpower);
+*/
+    // Done BLE scanning
+    wble_scan_stop(_ctx.wbleCtx);
+    // Don't bother turning module off as for proximity product it ibeacons in idle
 }
 
 static void off() {
@@ -469,7 +471,21 @@ void mod_ble_scan_prox_init(void) {
     _ctx.contactSignifTimeMins = MYNEWT_VAL(MOD_BLE_PROX_SIGNIF_CONTACT);
     _ctx.contactSignifRSSI = MYNEWT_VAL(MOD_BLE_PROX_SIGNIF_RSSI);
     // initialise access (this is resistant to multiple calls...)
-    _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
+    _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UARTIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
+
+    // Default major/minor for ibeaconning are the low 3 bytes from the lora devEUI... and major must have specific proximity MSB
+    uint8_t devEUI[8];
+    memset(&devEUI[0], 0, 8);       // Ensure all 0s if no deveui available
+    CFMgr_getElement(CFG_UTIL_KEY_LORA_DEVEUI, &devEUI[0], 8);
+    uint16_t major = (BLE_TYPE_PROXIMITY<<8) + devEUI[5];
+    uint16_t minor = (devEUI[6] << 8) + devEUI[7];
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_MAJOR, &major, sizeof(uint16_t));
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_MINOR, &minor, sizeof(uint16_t));
+    if (((major >> 8) & 0xff)!=BLE_TYPE_PROXIMITY) {
+        // ensure MSB of major is always "proxmity"
+        major = (BLE_TYPE_PROXIMITY<<8) + (major & 0xFF);
+        CFMgr_setElement(CFG_UTIL_KEY_BLE_IBEACON_MAJOR, &major, sizeof(uint16_t));
+    }
 
     // hook app-core for ble scan - serialised as competing for UART. Note we claim we're an ibeaon module
     AppCore_registerModule("BLE-SCAN-PROX", APP_MOD_BLE_IB, &_api, EXEC_SERIAL);

@@ -692,7 +692,7 @@ void mod_ble_scan_tag_init(void) {
     _ctx.maxEnterPerUL=50;
     _ctx.maxExitPerUL=50;
     // initialise access (this is resistant to multiple calls...)
-    _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
+    _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UARTIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
 
     // hook app-core for ble scan - serialised as competing for UART
     AppCore_registerModule("BLE-SCAN-TAG", APP_MOD_BLE_SCAN_TAGS, &_api, EXEC_SERIAL);

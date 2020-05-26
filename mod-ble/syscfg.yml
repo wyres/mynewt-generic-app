@@ -1,7 +1,10 @@
 syscfg.defs:
     MOD_BLE_PWRIO:
-        description: "gpio pin to enable power on ble module (11)"
-        value: EXT_UART_PWR
+        description: "gpio pin to enable power on ble module (revA-D dcards) (11)"
+        value: -1
+    MOD_BLE_UARTIO:
+        description: "gpio pin to enable uart on ble module (revE- dcard) (11)"
+        value: -1
     MOD_BLE_UART:
         description: "uart socket device name to use to talk to ble module  (from BSP)"
         value: 'UART0_DEV'

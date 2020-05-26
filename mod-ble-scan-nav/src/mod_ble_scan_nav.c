@@ -169,7 +169,7 @@ void mod_ble_scan_nav_init(void) {
     _ctx.maxNavPerUL = MAX_BLE_TOSEND;
 
     // initialise access
-    _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
+    _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UARTIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
 
     // hook app-core for ble scan - serialised as competing for UART
     AppCore_registerModule("BLE-SCAN-NAV", APP_MOD_BLE_SCAN_NAV, &_api, EXEC_SERIAL);

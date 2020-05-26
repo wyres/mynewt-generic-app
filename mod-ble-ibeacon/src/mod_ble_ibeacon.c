@@ -31,21 +31,25 @@ static struct {
     uint16_t major;
     uint16_t minor;
     int8_t txpower;
-} _ctx = {
-    .wbleCtx=NULL,
-};
+} _ctx;
 
 /** callback fns from BLE generic package */
 static void ble_cb(WBLE_EVENT_t e, void* d) {
     switch(e) {
         case WBLE_COMM_FAIL: {
             log_debug("MBB: comm nok");
+            // We're done : tell app-core to move on
+            AppCore_module_done(APP_MOD_BLE_IB);
             break;
         }
         case WBLE_COMM_OK: {
             log_debug("MBB: comm ok");
-            // Scan selecting only majors between 0x0000 and 0x00FF ie short range
             wble_ibeacon_start(_ctx.wbleCtx, &_ctx.UUID[0], _ctx.major, _ctx.minor, 0, _ctx.beaconPeriodMS, _ctx.txpower);
+            break;
+        }
+        case WBLE_COMM_IB_RUNNING: {
+            log_debug("MBB: ib ok");
+            AppCore_module_done(APP_MOD_BLE_IB);
             break;
         }
         default: {
@@ -57,18 +61,32 @@ static void ble_cb(WBLE_EVENT_t e, void* d) {
 
 // My api functions
 static uint32_t start() {
-    wble_start(_ctx.wbleCtx, ble_cb);
+    // ibeaconning is normally running, but redo the start each time to get any param changes.
+    // Default major/minor are the low 4 bytes from the lora devEUI...
+    uint8_t devEUI[8];
+    memset(&devEUI[0], 0, 8);       // Ensure all 0s if no deveui available
+    CFMgr_getElement(CFG_UTIL_KEY_LORA_DEVEUI, &devEUI[0], 8);
+
+    _ctx.major = (devEUI[4] << 8) + devEUI[5];
+    _ctx.minor = (devEUI[6] << 8) + devEUI[7];
+    _ctx.beaconPeriodMS = 500;
+    _ctx.txpower = -20;
+
     CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_PERIOD_MS, &_ctx.beaconPeriodMS, sizeof(uint32_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_MAJOR, &_ctx.major, sizeof(uint16_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_MINOR, &_ctx.minor, sizeof(uint16_t));
     CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_TXPOWER, &_ctx.txpower, sizeof(int8_t));
-    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_UUID, &_ctx.UUID, 8);
+    // NOte that if uuid in config is all 0, then the default wyres uuid is used for scanning and for ibeaconing
+    CFMgr_getOrAddElement(CFG_UTIL_KEY_BLE_IBEACON_UUID, &_ctx.UUID, UUID_SZ);
 
-    return 0;       // not required
+    // Start BLE module if wasn't already (will call me back)
+    wble_start(_ctx.wbleCtx, ble_cb);
+
+    return 30000;       // stops when ib setup is done
 }
 
 static void stop() {
-    // and power down 
+    // Just leaving it on..
 //    wble_stop(_ctx.wbleCtx);
 }
 static void off() {
@@ -93,9 +111,9 @@ static APP_CORE_API_t _api = {
 // Initialise module
 void mod_ble_ibeacon_init(void) {
     // initialise access
-    _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
+    _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UARTIO), MYNEWT_VAL(MOD_BLE_UART_SELECT));
 
-    // hook app-core for ble scan - serialised as competing for UART
+    // hook app-core for ble access - serialised as competing for UART
     AppCore_registerModule("BLE-IB", APP_MOD_BLE_IB, &_api, EXEC_SERIAL);
-//    log_debug("MBB:mod-ble-scan-nav inited");
+//    log_debug("MBB:mod-ble-ibeacon inited");
 }

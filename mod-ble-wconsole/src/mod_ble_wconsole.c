@@ -113,7 +113,7 @@ static APP_CORE_API_t _api = {
 // Initialise module
 void mod_ble_wconsole_init(void) {
     // initialise access (this is resistant to multiple calls...)
-    _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UART_SELECT)); 
+    _ctx.wbleCtx = wble_mgr_init(MYNEWT_VAL(MOD_BLE_UART), MYNEWT_VAL(MOD_BLE_UART_BAUDRATE), MYNEWT_VAL(MOD_BLE_PWRIO), MYNEWT_VAL(MOD_BLE_UARTIO), MYNEWT_VAL(MOD_BLE_UART_SELECT)); 
     // hook app-core for ble scan - serialised as competing for UART. Note we claim we're an ibeaon module
     AppCore_registerModule("BLE-WCONSOLE", APP_MOD_BLE_CONSOLE, &_api, EXEC_SERIAL);
 //    log_debug("MB:mod-ble-wconsole inited");
