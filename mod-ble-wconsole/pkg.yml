@@ -32,4 +32,5 @@ pkg.deps:
     - "@app-generic/mod-ble"
 
 pkg.init:
-    mod_ble_wconsole_init : 992
+    # wconsole gets to init before other BLE users in case BLE module is in cross-connect (which means it won't response to other commands)
+    mod_ble_wconsole_init : 991

@@ -60,10 +60,12 @@ static void stop() {
 static void off() {
     // ensure sensors are low power mode
     SRMgr_stop();
+    MMMgr_stop();
 }
 static void deepsleep() {
     // ensure sensors are off
     SRMgr_stop();
+    MMMgr_stop();
 }
 static bool getData(APP_CORE_UL_t* ul) {
     // byte array used for assembling values. Must be of size to fit largest guy
