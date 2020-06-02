@@ -448,9 +448,9 @@ static bool getData(APP_CORE_UL_t* ul) {
     if (_ctx.bleErrorMask!=0) {
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_ERRORMASK, 1, &_ctx.bleErrorMask);
     }
-    log_info("MBp:UL curr %d new %d exit %d err %02x", 
-        nbContactCurrent, nbContactNew, nbContactEnd, _ctx.bleErrorMask);
-    return (nbContactNew>0 || nbContactEnd>0 || nbContactCurrent>0 || _ctx.bleErrorMask!=0);
+    log_info("MBp:UL curr %d new %d exit %d nav %d err %02x", 
+        nbContactCurrent, nbContactNew, nbContactEnd, _ctx.nbNav>0, _ctx.bleErrorMask);
+    return (nbContactNew>0 || nbContactEnd>0 || nbContactCurrent>0 || _ctx.nbNav>0 || _ctx.bleErrorMask!=0);
 }
 
 static APP_CORE_API_t _api = {
