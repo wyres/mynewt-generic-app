@@ -367,6 +367,171 @@ static ATRESULT atcmd_hexline(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     return ATCMD_OK;
 }
 
+/** LORA control commands and callbacks */
+static const char* lwRes2Str(LORAWAN_RESULT_t res) {
+    switch (res)
+    {
+    case LORAWAN_RES_OK:
+    case LORAWAN_RES_JOIN_OK:
+        return "OK";
+    case LORAWAN_RES_NOT_JOIN:
+        return "NOK : not joined";
+    case LORAWAN_RES_DUTYCYCLE:
+        return "NOK : duty cycle limited";
+    case LORAWAN_RES_OCC:
+        return "NOK : duty cycle limited";
+    case LORAWAN_RES_NO_BW:
+        return "NOK : no bandwidth?";
+    case LORAWAN_RES_TIMEOUT: // what does this imply?
+        return "NOK : timeout waiting for result";
+    case LORAWAN_RES_BADPARAM:
+        return "NOK : param rejected";
+    case LORAWAN_RES_FWERR:
+        return "NOK : fw err";
+    case LORAWAN_RES_HWERR:
+        return "NOK : hw err";
+    default:
+        return "NOK : unknown result";
+    }
+}
+static void lora_join_cb(void *userctx, LORAWAN_RESULT_t res)
+{
+    PRINTLN_t pfn = (PRINTLN_t)userctx;
+    (*pfn)("lora JOIN cb : result:%s", lwRes2Str(res));
+    // TODO add get via api of all the config returned by join accept
+}
+static void lora_tx_cb(void *userctx, LORAWAN_RESULT_t res)
+{
+    PRINTLN_t pfn = (PRINTLN_t)userctx;
+    (*pfn)("TX: %s", lwRes2Str(res));
+}
+
+#define RX_PRINT_SZ (20)
+static void lora_rx_cb(void *userctx, LORAWAN_RESULT_t res, uint8_t port, int rssi, int snr, uint8_t *msg, uint8_t sz)
+{
+    PRINTLN_t pfn = (PRINTLN_t)userctx;
+    static char rxstr[RX_PRINT_SZ*2+2];      // First X bytes of pkt
+    for(int i=0;i<sz && i<RX_PRINT_SZ;i++) {
+        sprintf(&rxstr[i*2], "%02x", msg[i]);
+    }
+    (*pfn)("RX OK Port[%d] RSSI[%d] SNR[%d] sz[%d] [%s]", port, rssi, snr, sz, rxstr);
+}
+
+static ATRESULT atcmd_join(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
+    // if SF / ADR params given setup lora layer
+    LORAWAN_SF_t sf = LORAWAN_SF10;
+    bool adr = false;
+    if (nargs>1) {
+        sf = atoi(argv[1]);
+    }
+    if (nargs>2) {
+        adr = (atoi(argv[2])==1);
+    }
+    // TODO
+    // lora_api_set_ADR(adr);
+
+    LORAWAN_RESULT_t status = lora_api_join(lora_join_cb, sf, pfn);
+    if (status == LORAWAN_RES_JOIN_OK)
+    {
+        // already joined (?) seems unlikely so warn about it
+        (*pfn)("JOIN: already joined?!?");
+    }
+    else if (status != LORAWAN_RES_OK)
+    {
+        // Failed to start join process... this isn't great
+        (*pfn)("JOIN : tx attempt failed immediately (%s)", lwRes2Str(status));
+    } else 
+    {
+        (*pfn)("JOIN: trying with ADR[%s]...", adr?"enabled":"disabled");
+    }
+    return ATCMD_PROCESSED;
+}
+static int parseHexString(const char* str, uint8_t* buf, int maxsz) {
+    if (str==NULL || buf==NULL || maxsz<1) {
+        return -1;      // no can do
+    }
+    int sz = strlen(str)/2;
+    if (sz>maxsz) {
+        sz = maxsz;
+    }
+    if (Util_scanhex(str, sz, buf)!=sz) {
+        // not parseable as hex bytes right to the end
+        log_warn("failed to parse [%s] as hex", str);
+        return -1;
+    }
+    return sz;
+}
+#define TX_PRINT_SZ (20)        // max size of tx buffer in bytes
+static ATRESULT atcmd_tx(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
+    LORAWAN_SF_t sf = LORAWAN_SF10;
+    uint8_t txPort = 3;
+    bool ack = false;
+    uint8_t txbuf[TX_PRINT_SZ];
+    uint8_t txsz = 0;
+    // Parse params for hex payload, sf, ackrequest
+    if (nargs<2) {
+        return ATCMD_BADARG;
+    }
+    txsz = parseHexString(argv[1], txbuf, TX_PRINT_SZ);
+    if (txsz<0) {
+        (*pfn)("ERROR: failed to parse hex data [%s]", argv[1]);
+        return ATCMD_BADARG;
+    }
+    if (txsz==TX_PRINT_SZ) {
+        (*pfn)("WARNING: tx data truncated to %d bytes", txsz);
+    }
+    if (nargs>2) {
+        txPort = atoi(argv[2]);
+    }
+    if (nargs>3) {
+        sf = atoi(argv[3]);
+    }
+    if (nargs>4) {
+        ack = (atoi(argv[4])==1);
+    }
+    LORAWAN_RESULT_t txres = lora_api_send(sf, txPort, ack, true,
+                                               txbuf, txsz, lora_tx_cb, pfn);
+    if (txres == LORAWAN_RES_OK) {
+        (*pfn)("TX: trying...");
+    } else {
+        (*pfn)("TX: failed: %d", txres);
+    }
+    return ATCMD_PROCESSED;
+}
+static ATRESULT atcmd_rx(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
+    int8_t rxport = -1;
+    // Parse specific port to listen to
+    if (nargs>1) {
+        rxport = atoi(argv[1]);
+    }
+    LORAWAN_RESULT_t rxres = lora_api_registerRxCB(rxport, lora_rx_cb, pfn);
+    if (rxres==LORAWAN_RES_OK) {
+        (*pfn)("RX enabled on port[%d]", rxport);
+    } else {
+        (*pfn)("RX failed to enable on port [%d]", rxport);
+    }
+    return ATCMD_PROCESSED;
+}
+static ATRESULT atcmd_linfo(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
+    // Get and print much lora stuff
+    (*pfn)("LoRa: Region[%d]", lora_api_getCurrentRegion());
+    // devEUI/appEUI/appKey
+//    uint8_t* deveui;
+    //deveui = lora_api_get_devEUI();
+//    (*pfn)("LoRa: devEUI[%02x%02x%02x%02x%02x%02x%02x%02x]", 
+//        deveui[0], deveui[1], deveui[2], deveui[3], deveui[4], deveui[5], deveui[6], deveui[7]);
+
+    // join status
+    (*pfn)("LoRa Status: JOINED[%s]", lora_api_isJoined()?"YES":"NO");
+    // current SF, tx power, ADR status
+//    (*pfn)("LoRa SF[%d] TXPower[%d] ADR[%d]", lora_api_get_sf(), lora_api_get_txpower(), lora_api_get_adr());
+    // devaddr/newkskey/appskey
+//    (*pfn)("LoRa devAddr[%06x] nwkSkey[%08x] appSkey[%08x]", lora_api_get_devAddr(), lora_api_get_nwkSkey(), lora_api_get_appSkey());
+    // fcnt up, down
+//    (*pfn)("LoRa fcntUL[%d] fcntDL[%d]", lora_api_get_fcntUL(), lora_api_get_fcntDL());
+    return ATCMD_PROCESSED;
+}
+
 static ATCMD_DEF_t ATCMDS[] = {
     { .cmd="AT", .desc="Wakeup", atcmd_hello},
     { .cmd="AT+HELLO", .desc="Wakeup", atcmd_hello},
@@ -384,6 +549,10 @@ static ATCMD_DEF_t ATCMDS[] = {
     { .cmd="AT+RUN", .desc="Go for active cycle immediately", atcmd_runcycle},
     { .cmd="AT+LOG", .desc="Set logging level", atcmd_setlogs},
     { .cmd="AT+H", .desc="FOTA hex download", atcmd_hexline},
+    { .cmd="AT+JOIN", .desc="LoRa JOIN", atcmd_join},
+    { .cmd="AT+TX", .desc="LoRa TX", atcmd_tx},
+    { .cmd="AT+RX", .desc="LoRa RX", atcmd_rx},
+    { .cmd="AT+LINFO", .desc="LoRa info", atcmd_linfo},
 };
 static ATRESULT atcmd_listcmds(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     uint8_t cl = sizeof(ATCMDS)/sizeof(ATCMDS[0]);

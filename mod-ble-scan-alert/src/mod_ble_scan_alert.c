@@ -124,10 +124,6 @@ static bool getData(APP_CORE_UL_t* ul) {
     }
     // get rid of any that have timed out
     wble_resetList(_ctx.wbleCtx, MAX_BEACON_TIMEOUT_SECS);
-    // If table list hasn't changed this time, don"t send
-    if (_ctx.bleTableHash == generateBLEListHash(MAX_BLE_TOSCAN, &_ctx.iblist[0])) {
-        return false;
-    }
 
         // Check if table is full.
     int nActive = wble_getNbIBActive(_ctx.wbleCtx,0);
@@ -167,7 +163,12 @@ static bool getData(APP_CORE_UL_t* ul) {
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_BLE_ERRORMASK, 1, &_ctx.bleErrorMask);
     }
 
-    log_info("MBA:UL saw %d sent best %d err %02x", wble_getNbIBActive(_ctx.wbleCtx, 0), nbSent, _ctx.bleErrorMask);
+    // If table list hasn't changed this time, you dont need to send (but we have added our info in case...)
+    if (_ctx.bleTableHash == generateBLEListHash(MAX_BLE_TOSCAN, &_ctx.iblist[0])) {
+        log_info("MBA:UL saw unchanged %d added best %d err %02x", wble_getNbIBActive(_ctx.wbleCtx, 0), nbSent, _ctx.bleErrorMask);
+        return false;
+    }
+    log_info("MBA:UL saw changed %d sent best %d err %02x", wble_getNbIBActive(_ctx.wbleCtx, 0), nbSent, _ctx.bleErrorMask);
     return true;        // always gotta send UL if list has changed as 'no BLEs seen' is also important!
 }
 
