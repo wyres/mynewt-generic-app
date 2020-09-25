@@ -1,0 +1,14 @@
+syscfg.defs:
+    MOD_BLE_MAXIBS_ALERT:
+        description: "max number of ibeacons that can be sent in UL for alerts"
+        value: 3
+
+    MOD_BLE_DEFAULT_SCAN_TIME_MS:
+        description: "default ble scan time in ms"
+        value: 5000
+
+    MOD_BLE_MAX_TIMEOUT_BEACONS:
+        description: "time in seconds before removing a beacon from the list when we no longer receive its  messages"
+        value: 30       # this assumes that idle time is 0 ie continuous scan
+
+syscfg.vals:
