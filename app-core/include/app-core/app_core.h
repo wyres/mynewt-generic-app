@@ -70,6 +70,8 @@ void AppCore_setModuleState(APP_MOD_ID_t mid, bool active);
 uint32_t AppCore_lastULTime();
 // Time in ms to next UL in theory
 uint32_t AppCore_getTimeToNextUL();
+// Get UL message to add TLVs to it (outside of getData() callbacks)
+APP_CORE_UL_t* AppCore_getUL();
 // Go for UL preparation NOW - optionally with only requested module being run. If -1 then normal data collection.
 bool AppCore_forceUL(int reqModule);
 // Tell core we're done processing

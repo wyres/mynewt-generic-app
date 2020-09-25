@@ -1245,6 +1245,10 @@ uint32_t AppCore_getTimeToNextUL()
 {
     return TMMgr_getRelTimeSecs() - _ctx.idleStartTS;
 }
+// Get handle to next UL message to add TLVs etc (outside of getData() calls)
+APP_CORE_UL_t* AppCore_getUL() {
+    return &_ctx.txmsg;
+}
 // Request stop idle and goto UL phase now
 // optionally request 'fast' UL ie just 1 module to let do data collection
 //  (required for fast button UL sending)
