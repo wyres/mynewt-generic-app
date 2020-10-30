@@ -591,7 +591,7 @@ static SM_STATE_ID_t State_Idle(void *arg, int e, void *data)
                 (*(ctx->mods[i].api->deepsleepCB))();
             }
         }
-        log_check_uart_active();        // so closes it if no logs being sent - not yet tested removed
+        log_check_uart_active();        // so closes it if no logs being sent 
         // and stay idle in deep sleep if possible (other code may also have an option)
         LPMgr_setLPMode(ctx->lpUserId, LP_DEEPSLEEP);
         // if enabled signal the device state (active or inactive) via LED flash pattern (enqueued) 
@@ -605,7 +605,7 @@ static SM_STATE_ID_t State_Idle(void *arg, int e, void *data)
         // LEDs off
         ledCancel(MYNEWT_VAL(MODS_ACTIVE_LED));
         ledCancel(MYNEWT_VAL(NET_ACTIVE_LED));
-        log_check_uart_active();        // so closes it if no logs being sent - not yet tested removed
+        log_check_uart_active();        // so closes it if no logs being sent 
         // any low power when not idle will be basic low power MCU (ie with radio and gpios on)
         LPMgr_setLPMode(ctx->lpUserId, LP_DOZE);
         return SM_STATE_CURRENT;
@@ -650,7 +650,7 @@ static SM_STATE_ID_t State_Idle(void *arg, int e, void *data)
         sm_timer_start(ctx->mySMId, ctx->idleTimeCheckSecs * 1000);
         log_debug("AC:reidle %ds as %d < %d", ctx->idleTimeCheckSecs, dt, idletimeS);
         
-        log_check_uart_active();        // so closes it if no logs being sent - not yet tested removed
+        log_check_uart_active();        // so closes it if no logs being sent 
         LPMgr_setLPMode(ctx->lpUserId, LP_DEEPSLEEP);
         // if enabled signal the device state (active or inactive)
         deviceStateIndicate();

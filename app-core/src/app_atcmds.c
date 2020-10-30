@@ -36,6 +36,15 @@ static ATRESULT atcmd_hello(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     (*pfn)("Hello.");
     return ATCMD_PROCESSED;
 }
+static ATRESULT atcmd_halt(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
+    (*pfn)("Goodbye.");
+    // To enter stock mode, we reboot with a specific reboot reason, and the rebootmgr will
+    // do the enter. This ensures that if the MCU internal watchdog timer is running, it will
+    // be disabled (example: STM32 IWDG timer cannot be stopped once started, and runs even in STOP/STANDBY modes)
+    RMMgr_reboot(RM_ENTER_STOCK_MODE);
+    // Won't come back if ok
+    return ATCMD_PROCESSED;
+}
 static ATRESULT atcmd_who(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     APP_CORE_FW_t* fwinfo = AppCore_getFwInfo();
     (*pfn)("AppCore:%s (%lu)", fwinfo->fwname, Util_hashstrn(fwinfo->fwname, MAXFWNAME));
@@ -535,6 +544,7 @@ static ATRESULT atcmd_linfo(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
 static ATCMD_DEF_t ATCMDS[] = {
     { .cmd="AT", .desc="Wakeup", atcmd_hello},
     { .cmd="AT+HELLO", .desc="Wakeup", atcmd_hello},
+    { .cmd="AT+STOCK", .desc="Stock mode", atcmd_halt},
     { .cmd="AT+WHO", .desc="Dsplay card type", atcmd_who},
     { .cmd="AT+HELP", .desc="List commands", atcmd_listcmds},
     { .cmd="AT?", .desc="List commands", atcmd_listcmds},

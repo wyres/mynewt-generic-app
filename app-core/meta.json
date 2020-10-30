@@ -1,0 +1,118 @@
+[ 
+    { "section":"core",
+        "uldata":[
+            { "tag":0, "len":8, "type":"ba", "name":"APP_CORE_UL_VERSION", "description":{"en":{"short":"Version", "long":"Firmware version M.m.BUILD#target"}}},
+            { "tag":1, "len":4, "type":"tsS", "name":"APP_CORE_UL_UPTIME", "description":{"en":{"short":"Uptime", "long":"Seconds since boot"}}},
+            { "tag":2, "len":4, "type":"int", "name":"APP_CORE_UL_CONFIG", "description":{"en":{"short":"Config element", "long":"Key and value of a configuration element"}}},
+            { "tag":3, "len":2, "type":"int", "name":"APP_CORE_UL_ENV_TEMP", "description":{"en":{"short":"Temp", "long":"Temperature in 1/100 degree C"}}},
+            { "tag":4, "len":4, "type":"int", "name":"APP_CORE_UL_ENV_PRESSURE", "description":{"en":{"short":"Pressure", "long":"Atmospheric pressure in Pa"}}},
+            { "tag":5, "len":1, "type":"uint", "name":"APP_CORE_UL_ENV_HUMIDIT", "description":{"en":{"short":"Humidity", "long":"Humidity percentage"}}},
+            { "tag":6, "len":1, "type":"uint", "name":"APP_CORE_UL_ENV_LIGHT", "description":{"en":{"short":"Light level", "long":"Light level between 0 (dark) and 255 (full sunlight)"}}},
+            { "tag":7, "len":2, "type":"uint", "name":"APP_CORE_UL_ENV_BATTERY", "description":{"en":{"short":"Battery", "long":"Battery voltage in mV"}}},
+            { "tag":8, "len":2, "type":"uint", "name":"APP_CORE_UL_ENV_ADC1", "description":{"en":{"short":"ADC1", "long":"ADC input 1 in mV"}}},
+            { "tag":9, "len":2, "type":"uint", "name":"APP_CORE_UL_ENV_ADC2", "description":{"en":{"short":"ADC2", "long":"ADC input 2 in mV"}}},
+            { "tag":10, "len":6, "type":"ba", "name":"APP_CORE_UL_ENV_NOISE", "description":{"en":{"short":"Last noise", "long":"Last noise timestamp and its frequency and amplitude"}}},
+            { "tag":11, "len":10, "type":"ba", "name":"APP_CORE_UL_ENV_BUTTON", "description":{"en":{"short":"Last button", "long":"Last button press/release times, current state and last press type (short, medium, long)"}}},
+            { "tag":12, "len":4, "type":"tsS", "name":"APP_CORE_UL_ENV_MOVE", "description":{"en":{"short":"Last moved", "long":"Timestamp of last moved event (seconds since reboot)"}}},
+            { "tag":13, "len":4, "type":"tsS", "name":"APP_CORE_UL_ENV_FALL", "description":{"en":{"short":"Last fall", "long":"Timestamp of last fall event (seconds since reboot)"}}},
+            { "tag":14, "len":4, "type":"tsS", "name":"APP_CORE_UL_ENV_SHOCK", "description":{"en":{"short":"Last shock", "long":"Timestamp of last shock event (seconds since reboot)"}}},
+            { "tag":15, "len":4, "type":"ba", "name":"APP_CORE_UL_ENV_ORIENT", "description":{"en":{"short":"Orientation", "long":"Latest device orientation and x,y,z"}}},
+            { "tag":16, "len":8, "type":"ba", "name":"APP_CORE_UL_ENV_REBOOT", "description":{"en":{"short":"Reboot reasons", "long":"Last 8 reboot reason codes"}}},
+            { "tag":17, "len":4, "type":"hex", "name":"APP_CORE_UL_ENV_LASTASSERT", "description":{"en":{"short":"Last assert", "long":"Code address of caller of last assert"}}},
+            { "tag":18, "len":-1, "type":"ba", "name":"APP_CORE_UL_BLE_CURR", "description":{"en":{"short":"Current iBeacons", "long":"List of navigation iBeacons currently in range"}}},
+            { "tag":19, "len":-1, "type":"ba", "name":"APP_CORE_UL_BLE_ENTER", "description":{"en":{"short":"iBeacons arrived", "long":"List of asset iBeacons that are new in range"}}},
+            { "tag":20, "len":-1, "type":"ba", "name":"APP_CORE_UL_BLE_EXIT", "description":{"en":{"short":"iBeacons left", "long":"List of asset iBeacons no longer detectable"}}},
+            { "tag":21, "len":-1, "type":"ba", "name":"APP_CORE_UL_BLE_COUNT", "description":{"en":{"short":"Count of iBeacons", "long":"Counts of resource iBeacons per type"}}},
+            { "tag":22, "len":12, "type":"ba", "name":"APP_CORE_UL_GPS", "description":{"en":{"short":"GPS data", "long":"lat/lon/alt of position"}}},
+            { "tag":23, "len":4, "type":"hex", "name":"APP_CORE_UL_BLE_ERRORMASK", "description":{"en":{"short":"BLE Errors", "long":"Bitmask of error cases related to BLE scanning"}}},
+            { "tag":24, "len":4, "type":"hex", "name":"APP_CORE_UL_ENV_LASTLOGCALLER", "description":{"en":{"short":"Last fn log", "long":"Code address of last caller of function trace"}}},
+            { "tag":25, "len":-1, "type":"ba", "name":"APP_CORE_UL_BLE_PRESENCE", "description":{"en":{"short":"iBeacons present", "long":"Bit mask of presence iBeacons currently in range"}}},
+            { "tag":26, "len":4, "type":"bool", "name":"APP_CORE_UL_APP_ACK_REQ", "description":{"en":{"short":"App ack request", "long":"Request for application layer to acknowledge receipt of this message"}}},
+            { "tag":27, "len":-1, "type":"ba", "name":"APP_CORE_UL_BLE_PROX_ENTER", "description":{"en":{"short":"Contact arrived", "long":"New contacts detected (via iBeacon)"}}},
+            { "tag":28, "len":-1, "type":"ba", "name":"APP_CORE_UL_BLE_PROX_EXIT", "description":{"en":{"short":"Contacts left", "long":"Contacts that have left (via iBeacon)"}}}
+        ],
+        "dlactions":[
+            { "tag":1, "len":0, "ptype":"", "name":"APP_CORE_DL_REBOOT", "description":{"en":{"short":"Reboot", "long":"Request reboot of the device"}}},
+            { "tag":2, "len":-1, "ptype":"ba", "name":"APP_CORE_DL_SET_CONFIG", "description":{"en":{"short":"Set config", "long":"Set the specified config element value"}}},
+            { "tag":3, "len":2, "ptype":"ba", "name":"APP_CORE_DL_GET_CONFIG", "description":{"en":{"short":"Get config", "long":"Get the specified config element value (returned in next uplink)"}}},
+            { "tag":5, "len":2, "ptype":"ba", "name":"APP_CORE_DL_FLASH_LED1", "description":{"en":{"short":"Flash LED1", "long":"Flash LED1 at specified frequency for specified time"}}},
+            { "tag":6, "len":2, "ptype":"ba", "name":"APP_CORE_DL_FLASH_LED2", "description":{"en":{"short":"Flash LED2", "long":"Flash LED2 at specified frequency for specified time"}}},
+            { "tag":24, "len":4, "ptype":"uint", "name":"APP_CORE_DL_SET_UTCTIME", "description":{"en":{"short":"Set UTC time", "long":"Sets the current UTC time in seconds since epoch"}}},
+            { "tag":25, "len":8, "ptype":"ba", "name":"APP_CORE_DL_FOTA", "description":{"en":{"short":"Prepare FOTA", "long":"Request device to prepare for FOTA with specific version"}}},
+            { "tag":26, "len":2, "ptype":"hex", "name":"APP_CORE_DL_GET_MODS", "description":{"en":{"short":"Module mask", "long":"Bitmask to enable/disable module operation"}}},
+            { "tag":11, "len":0, "ptype":"na", "name":"APP_CORE_DL_FIX_GPS", "description":{"en":{"short":"GPS request", "long":"Request that the device does a GPS fix"}}},
+            { "tag":27, "len":0, "ptype":"na", "name":"APP_CORE_DL_GET_DEBUG", "description":{"en":{"short":"Request debug", "long":"Request that the debug information is sent (as in reboot case)"}}},
+            { "tag":28, "len":1, "ptype":"uint8", "name":"APP_CORE_DL_APP_ACK", "description":{"en":{"short":"App ack", "long":"Acknowledge application "}}}
+        ],
+        "config":[
+            { "module":1, "name":"core", "elements": [
+                { "tag":1, "type":"uint", "len":4, "units":"secs", "min":0, "max":3600, "name":"CFG_UTIL_KEY_IDLE_TIME_MOVING_SECS", "default":"60", "description": { "en" : { "short":"Idle time (moving)", "long":"Idle time between data collection for when active in seconds"}} },
+                { "tag":2, "type":"uint", "len":4, "units":"mins", "min":1, "max":1440, "name":"CFG_UTIL_KEY_IDLE_TIME_NOTMOVING_MINS", "default":"", "description": { "en" : { "short":"Idle time (not moving)", "long":"Idle time between data collection in minutes if device experiences no movement"}} },
+                { "tag":3, "type":"uint", "len":4, "units":"secs", "min":0, "max":3600, "name":"CFG_UTIL_KEY_MODSETUP_TIME_SECS", "default":"", "description": { "en" : { "short":"Depreciated", "long":""}} },
+                { "tag":4, "type":"ba", "len":2, "units":"", "min":-1, "max":-1, "name":"CFG_UTIL_KEY_MODS_ACTIVE_MASK", "default":"FFFF", "description": { "en" : { "short":"Active modules bitmask", "long":"Bitmask indicating which compiled modules are actively operating"}} },
+                { "tag":5, "type":"uint", "len":4, "units":"mins", "min":1, "max":1440,  "name":"CFG_UTIL_KEY_MAXTIME_UL_MINS", "default":"", "description": { "en" : { "short":"Max time between UL", "long":"Maximum time in minutes between ULs (force an uplink)"}} },
+                { "tag":6, "type":"uint", "len":1, "units":"", "min":0, "max":15, "name":"CFG_UTIL_KEY_DL_ID", "default":"0", "description": { "en" : { "short":"Current DL id", "long":"Store current DL id for reliable DL operation"}} },
+                { "tag":7, "type":"uint", "len":4, "units":"secs", "min":5, "max":120, "name":"CFG_UTIL_KEY_IDLE_TIME_CHECK_SECS", "default":"60", "description": { "en" : { "short":"Time between idle checks", "long":"Time in seconds between checking if idle time is expired"}} },
+                { "tag":8, "type":"bool", "len":1, "units":"", "min":0, "max":1, "name":"CFG_UTIL_KEY_STOCK_MODE", "default":"0", "description": { "en" : { "short":"Stock mode", "long":"If fail to join after boot, enter stock mode instead of retry"}} },
+                { "tag":9, "type":"uint", "len":4, "units":"secs", "min":0, "max":3600, "name":"CFG_UTIL_KEY_JOIN_TIMEOUT_SECS", "default":"", "description": { "en" : { "short":"JOIN timeout", "long":"Time in seconds to wait for a JOIN response"}} },
+                { "tag":10, "type":"uint", "len":4, "units":"mins", "min":1, "max":1440, "name":"CFG_UTIL_KEY_RETRY_JOIN_TIME_MINS", "default":"", "description": { "en" : { "short":"Time between JOIN phase retries", "long":"Time in minutes before retring JOIN"}} },
+                { "tag":11, "type":"ba", "len":8, "units":"na", "min":-1, "max":-1, "name":"CFG_UTIL_KEY_FIRMWARE_INFO", "default":"", "description": { "en" : { "short":"Firmware information", "long":"Firmware build target, date etc"}} },
+                { "tag":12, "type":"uint", "len":1, "units":"", "min":0, "max":255, "name":"CFG_UTIL_KEY_HW_BASE_REV", "default":"3", "description": { "en" : { "short":"HW base card id", "long":"Id indicating type of base card (0=vProto, 1=v2revB, 2=v2revC/D, 10=v3revA"}} },
+                { "tag":13, "type":"uint", "len":4, "units":"secs", "min":0, "max":3600, "name":"CFG_UTIL_KEY_RETRY_JOIN_TIME_SECS", "default":"", "description": { "en" : { "short":"Time between attempts in JOIN phase", "long":"Time in seconds between JOIN requests during JOIN phase"}} },
+                { "tag":14, "type":"uint", "len":1, "units":"", "min":1, "max":10, "name":"CFG_UTIL_KEY_MAX_RAPID_JOIN_ATTEMPTS", "default":"3", "description": { "en" : { "short":"Number of attempts in JOIN phase", "long":"Number of attempts (requests) to do during the JOIN phase"}} },
+                { "tag":15, "type":"bool", "len":1, "units":"", "min":0, "max":1, "name":"CFG_UTIL_KEY_DEVICE_ACTIVE", "default":"1", "description": { "en" : { "short":"Enable/disable device operation", "long":"Is device active?"}} },
+                { "tag":16, "type":"uint", "len":4, "units":"mins", "min":1, "max":1440, "name":"CFG_UTIL_KEY_IDLE_TIME_INACTIVE_MINS", "default":"", "description": { "en" : { "short":"Inactive state idle time", "long":"Time in minutes to sleep in idle when device is inactive."}} },
+                { "tag":17, "type":"bool", "len":1, "units":"", "min":0, "max":1, "name":"CFG_UTIL_KEY_ENABLE_DEVICE_STATE_LEDS", "default":"0", "description": { "en" : { "short":"Enable state LEDs", "long":"Enable/disable LED flash in idle to indicate device state."}} }
+            ]},
+            { "module":4, "name":"lora", "elements": [
+                { "tag":1, "type":"ba", "len":8, "units":"a", "min":-1, "max":-1, "name":"CFG_UTIL_KEY_LORA_DEVEUI", "default":"38B8EBE000000000", "description": { "en" : { "short":"LoRaWAN devEUI", "long":"LoRaWAN devEUI unique to this device"}} },
+                { "tag":2, "type":"ba", "len":8, "units":"", "min":-1, "max":-1, "name":"CFG_UTIL_KEY_LORA_APPEUI", "default":"38B8EBE000000000", "description": { "en" : { "short":"LoRaWAN appEUI", "long":"LoRaWAN device appEUI (or joinEUI)"}} },
+                { "tag":3, "type":"ba", "len":16, "units":"", "min":-1, "max":-1, "name":"CFG_UTIL_KEY_LORA_APPKEY", "default":"00112233445566778899AABBCCDDEEFF", "description": { "en" : { "short":"LoRaWAN appKey", "long":"LoRaWAN device encryption key"}} },
+                { "tag":4, "type":"ba", "len":3, "units":"", "min":-1, "max":-1, "name":"CFG_UTIL_KEY_LORA_DEVADDR", "default":"000000", "description": { "en" : { "short":"LoRaWAN devAddr", "long":"LoRaWAN session device address (set by OTAA)"}} },
+                { "tag":5, "type":"ba", "len":4, "units":"", "min":-1, "max":-1, "name":"CFG_UTIL_KEY_LORA_NWKSKEY", "default":"00112233", "description": { "en" : { "short":"LoRaWAN network key", "long":"LoRaWAN network message session encryption key (set by OTAA)"}} },
+                { "tag":6, "type":"ba", "len":4, "units":"", "min":-1, "max":-1, "name":"CFG_UTIL_KEY_LORA_APPSKEY", "default":"44556677", "description": { "en" : { "short":"LoRaWAN application key", "long":"LoRaWAN application message session encryption key (set by OTAA)"}} },
+                { "tag":7, "type":"bool", "len":1, "units":"", "min":0, "max":1, "name":"CFG_UTIL_KEY_LORA_ADREN", "default":"0", "description": { "en" : { "short":"LoRaWAN ADR on/off", "long":"LoRaWAN accept ADR from LNS on/off"}} },
+                { "tag":8, "type":"bool", "len":1, "units":"", "min":0, "max":1, "name":"CFG_UTIL_KEY_LORA_ACKEN", "default":"0", "description": { "en" : { "short":"LoRaWAN UL Ack on/off", "long":"LoRaWAN UL confirmation request on/off"}} },
+                { "tag":9, "type":"uint", "len":1, "units":"", "min":7, "max":12, "name":"CFG_UTIL_KEY_LORA_SF", "default":"10", "description": { "en" : { "short":"LoRaWAN SF", "long":"LoRaWAN default SF to use"}} },
+                { "tag":10, "type":"int", "len":1, "units":"dbM", "min":-30, "max":30, "name":"CFG_UTIL_KEY_LORA_TXPOWER", "default":"14", "description": { "en" : { "short":"LoRaWAN Tx power", "long":"LoRaWAN UL default Tx power level to use"}} },
+                { "tag":11, "type":"uint", "len":1, "units":"", "min":1, "max":234, "name":"CFG_UTIL_KEY_LORA_TXPORT", "default":"3", "description": { "en" : { "short":"LoRaWAN UL port", "long":"LoRaWAN UL port to use"}} },
+                { "tag":12, "type":"uint", "len":1, "units":"", "min":0, "max":234, "name":"CFG_UTIL_KEY_LORA_RXPORT", "default":"0", "description": { "en" : { "short":"LoRaWAN DL port", "long":"LoRaWAN DL port to listen on (0 for all)"}} }
+            ]},
+            { "module":5, "name":"app", "elements": [
+                { "tag":1, "type":"uint", "len":4, "units":"ms", "min":500, "max":60000, "name":"CFG_UTIL_KEY_BLE_SCAN_TIME_MS", "default":"3000", "description": { "en" : { "short":"BLE scan time", "long":"BLE ibeacon scanning time in ms"}} },
+                { "tag":2, "type":"uint", "len":4, "units":"secs", "min":0, "max":3600, "name":"CFG_UTIL_KEY_GPS_COLD_TIME_SECS", "default":"120", "description": { "en" : { "short":"GPS cold start timeout", "long":"Time for GPS to find satellites on cold start"}} },
+                { "tag":3, "type":"uint", "len":4, "units":"secs", "min":0, "max":3600, "name":"CFG_UTIL_KEY_GPS_WARM_TIME_SECS", "default":"30", "description": { "en" : { "short":"GPS warm start timeout", "long":"Time for GPS to find satellites on warm start"}} },
+                { "tag":4, "type":"uint", "len":1, "units":"", "min":1, "max":3, "name":"CFG_UTIL_KEY_GPS_POWER_MODE", "default":"1", "description": { "en" : { "short":"GPS power mode", "long":"Mode selection for GPS : power on/off or standby"}} },
+                { "tag":5, "type":"uint", "len":1, "units":"", "min":1, "max":3, "name":"CFG_UTIL_KEY_GPS_FIX_MODE", "default":"1", "description": { "en" : { "short":"GPS fix mode", "long":"Mode selection for auto GPS fix : 0:fix on stop, 1:fix while moving, 2:fix when requested"}} },
+                { "tag":10, "type":"uint", "len":1, "units":"", "min":1, "max":10, "name":"CFG_UTIL_KEY_BLE_MAX_NAV_PER_UL", "default":"3", "description": { "en" : { "short":"Nb BLE nav beacons", "long":"Max number of BLE navigation type ibeacons to send in the UL"}} },
+                { "tag":11, "type":"uint", "len":4, "units":"mins", "min":1, "max":1440, "name":"CFG_UTIL_KEY_BLE_EXIT_TIMEOUT_MINS", "default":"5", "description": { "en" : { "short":"BLE exit timeout", "long":"Timeout to signal a iBeacon asset has left the scan zone"}} },
+                { "tag":12, "type":"uint", "len":1, "units":"", "min":1, "max":10, "name":"CFG_UTIL_KEY_BLE_MAX_ENTER_PER_UL", "default":"5", "description": { "en" : { "short":"Nb BLE assets enter", "long":"Max number of BLE asset type ibeacons to send in the UL"}} },
+                { "tag":13, "type":"uint", "len":1, "units":"", "min":1, "max":10, "name":"CFG_UTIL_KEY_BLE_MAX_EXIT_PER_UL", "default":"5", "description": { "en" : { "short":"Nb BLE assets exit", "long":"Max number of BLE asset type ibeacons to send in the UL"}} },
+                { "tag":14, "type":"uint", "len":2, "units":"", "min":1, "max":65535, "name":"CFG_UTIL_KEY_BLE_PRESENCE_MINOR", "default":"128", "description": { "en" : { "short":"iBeacon resource minor MSB", "long":"High byte of the minor number of iBeacons to consider them to be 'presence' type assets"}} },
+                { "tag":16, "type":"ba", "len":16, "units":"na", "min":-1, "max":-1, "name":"CFG_UTIL_KEY_BLE_IBEACON_UUID", "default":"00112233445566778899AABBCCDDEEFF", "description": { "en" : { "short":"BLE iBeacon UUID", "long":"UUID of iBeacon for either iBeaconning or scanning"}} },
+                { "tag":17, "type":"uint", "len":2, "units":"", "min":1, "max":65535, "name":"CFG_UTIL_KEY_BLE_IBEACON_MAJOR", "default":"1", "description": { "en" : { "short":"BLE iBeacon major", "long":"iBeacon major number when iBeaconning"}} },
+                { "tag":18, "type":"uint", "len":2, "units":"", "min":1, "max":65535, "name":"CFG_UTIL_KEY_BLE_IBEACON_MINOR", "default":"1", "description": { "en" : { "short":"BLE iBeacon minor", "long":"iBeacon minor number when iBeaconning"}} },
+                { "tag":19, "type":"uint", "len":4, "units":"ms", "min":100, "max":10000, "name":"CFG_UTIL_KEY_BLE_IBEACON_PERIOD_MS", "default":"300", "description": { "en" : { "short":"BLE iBeacon tx interval", "long":"iBeacon tx interval in milliseconds when iBeaconning"}} },
+                { "tag":20, "type":"int", "len":1, "units":"dbM", "min":-30, "max":4, "name":"CFG_UTIL_KEY_BLE_IBEACON_TXPOWER", "default":"4", "description": { "en" : { "short":"BLE iBeacon tx power", "long":"iBeacon tx power in dbM when advertising"}} },
+
+                { "tag":32, "type":"uint", "len":2, "units":"Pa", "min":1, "max":20000, "name":"CFG_UTIL_KEY_ENV_PRESSURE_REF", "default":"100000", "description": { "en" : { "short":"Pressure reference", "long":"Reference pressure for calibration of pressure sensor in Pa"}} },
+                { "tag":33, "type":"int", "len":2, "units":"Pa", "min":-1000, "max":1000, "name":"CFG_UTIL_KEY_ENV_PRESSURE_OFFSET", "default":"0", "description": { "en" : { "short":"Pressure offset", "long":"Offset between reference and pressure sensor in Pa"}} },
+                { "tag":34, "type":"ba", "len":4, "units":"", "min":-1, "max":-1, "name":"CFG_UTIL_KEY_BLE_IBEACON_COMPANYID", "default":"00000000", "description": { "en" : { "short":"BLE iBeacon company id", "long":"iBeacon company id to use when advertising"}} },
+                { "tag":35, "type":"str", "len":10, "units":"", "min":-1, "max":-1, "name":"CFG_UTIL_KEY_BLE_IBEACON_NAME", "default":"user", "description": { "en" : { "short":"BLE iBeacon user", "long":"user id for connection to management AT console over BLE"}} },
+                { "tag":36, "type":"str", "len":10, "units":"", "min":-1, "max":-1, "name":"CFG_UTIL_KEY_BLE_IBEACON_PASS", "default":"pass", "description": { "en" : { "short":"BLE iBeacon pass", "long":"passcode (4 digits) for connection to management AT console over BLE"}} },
+
+                { "tag":40, "type":"uint", "len":4, "units":"mins", "min":1, "max":1440, "name":"CFG_UTIL_KEY_BLE_PROX_STIME_MINS", "default":"15", "description": { "en" : { "short":"UCT proximity time", "long":"Time in minutes a UCT device must be seen to be considered a significant contact"}} },
+                { "tag":41, "type":"int", "len":1, "units":"", "min":-120, "max":0, "name":"CFG_UTIL_KEY_BLE_PROX_SRSSI", "default":"-90", "description": { "en" : { "short":"UCT proximity RSSI", "long":"RSSI level that UCT iBeacons must be received at to be considered close enough for a significant contact"}} },
+                { "tag":42, "type":"uint", "len":1, "units":"", "min":1, "max":4, "name":"CFG_UTIL_KEY_BLE_PROX_UL_REPS", "default":"1", "description": { "en" : { "short":"UCT proximity repetitions", "long":"Number of times each significant contact detail is sent in UL for security purposes"}} }
+            ]}
+        ]
+    },
+    { "section":"ble"
+    },
+    { "section":"env"
+    },
+    { "section":"gps"
+    },
+    { "section":"pti"
+    }
+]
