@@ -327,6 +327,7 @@ static ATRESULT atcmd_info(PRINTLN_t pfn, uint8_t nargs, char* argv[]) {
     (*pfn)("LastReset: %04x", RMMgr_getResetReasonCode());
     (*pfn)("LastAssert:[0x%08x]", RMMgr_getLastAssertCallerFn());
     (*pfn)("LastWELog:[0x%08x]", RMMgr_getLogFn(0));
+    (*pfn)("TimeNow:[%d]", TMMgr_getTimeSecs());
     SRMgr_stop();
     return ATCMD_PROCESSED;
 }

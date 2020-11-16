@@ -1434,8 +1434,8 @@ static void A_settime(uint8_t *v, uint8_t l)
 {
     log_info("AC:action SETTIME");
     uint32_t now = Util_readLE_uint32_t(v, l);
-    // boot time in UTC seconds is now - time elapsed since boot
-    TMMgr_setBootTime(now - TMMgr_getRelTimeSecs());
+    // now should be epoch time
+    TMMgr_setTimeSecs(now);
 }
 // Return state of modules?
 static void A_getmods(uint8_t *v, uint8_t l)
