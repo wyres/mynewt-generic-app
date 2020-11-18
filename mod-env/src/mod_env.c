@@ -191,6 +191,13 @@ static bool getData(APP_CORE_UL_t* ul) {
         app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_PRESSURE, 4, v);
         SRMgr_updatePressure();        // for 'significant' change test
     }
+    if (SRMgr_hasRelHumidityChanged()) {
+        dataChanged = true;
+        // get relative humidity
+        v[0] = SRMgr_getRelHumidity();
+        app_core_msg_ul_addTLV(ul, APP_CORE_UL_ENV_HUMIDIT, 1, v);
+        SRMgr_updateRelHumidity();        // for 'significant' change test
+    }
     if (SRMgr_hasADC1Changed()) {
         dataChanged = true;
         // get adc 1
